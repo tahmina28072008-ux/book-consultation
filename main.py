@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from twilio.rest import Client
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -48,8 +48,8 @@ DOCTORS = {
                 {"date": "2025-09-25", "times": ["16:30", "16:45"]},
             ],
             "The Holly Hospital": [
-                 {"date": "2025-09-22", "times": ["17:00", "18:30"]},
-                 {"date": "2025-09-26", "times": ["17:00", "18:30"]},
+                {"date": "2025-09-22", "times": ["17:00", "18:30"]},
+                {"date": "2025-09-26", "times": ["17:00", "18:30"]},
             ]
         }
     },
@@ -105,13 +105,22 @@ DOCTORS = {
     }
 }
 HOSPITALS = {
-    "The Holly Hospital": {"address": "High Road, Buckhurst Hill, Essex, IG9 5HX", "phone": "020 8505 3311"},
-    "Nuffield Health Brentwood Hospital": {"address": "Shenfield Road, Brentwood, CM15 8EH", "phone": "01277 695695"}
+    "The Holly Hospital": {
+        "city": "London",
+        "postcode": "IG9 5HX",
+        "address": "High Road, Buckhurst Hill, Essex",
+        "phone": "020 8505 3311"
+    },
+    "Nuffield Health Brentwood Hospital": {
+        "city": "Brentwood",
+        "postcode": "CM15 8EH",
+        "address": "Shenfield Road, Brentwood",
+        "phone": "01277 695695"
+    }
 }
 
 # --- Helper Functions ---
 def send_whatsapp_message(to_number, message_body):
-    """Sends a WhatsApp message via Twilio."""
     from_number = "whatsapp:+14155238886"
     if not twilio_client:
         logging.error("Twilio client not initialized.")
@@ -128,7 +137,6 @@ def send_whatsapp_message(to_number, message_body):
         return False, f"Failed to send message: {e}"
 
 def send_email(to_email, subject, plain_body, html_body):
-    """Sends a confirmation email."""
     sender_email = os.environ.get("EMAIL_USER")
     sender_password = os.environ.get("EMAIL_PASSWORD")
     if not sender_email or not sender_password:
@@ -139,11 +147,8 @@ def send_email(to_email, subject, plain_body, html_body):
     msg['From'] = sender_email
     msg['To'] = to_email
     msg['Subject'] = subject
-
-    part1 = MIMEText(plain_body, 'plain')
-    part2 = MIMEText(html_body, 'html')
-    msg.attach(part1)
-    msg.attach(part2)
+    msg.attach(MIMEText(plain_body, 'plain'))
+    msg.attach(MIMEText(html_body, 'html'))
 
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -156,182 +161,128 @@ def send_email(to_email, subject, plain_body, html_body):
         logging.error(f"Failed to send email: {e}")
         return False
 
+# --- Webhook ---
 @app.route('/webhook', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
-    fulfillment_response = {
-        "fulfillmentResponse": {
+    tag = req.get("fulfillmentInfo", {}).get("tag")
+    params = req.get("sessionInfo", {}).get("parameters", {})
+
+    logging.info(f"Webhook called. Tag: {tag}, Params: {params}")
+
+    # --- Tag: Get Doctor List ---
+    if tag == "get_doctor_list":
+        city = params.get("city")
+        postcode = params.get("postcode")
+        specialty = params.get("specialty")
+
+        available = []
+        for doctor_name, details in DOCTORS.items():
+            if specialty and specialty.lower() not in details["specialty"].lower():
+                continue
+            for loc in details["locations"]:
+                hospital = HOSPITALS.get(loc, {})
+                if city and city.lower() not in hospital.get("city", "").lower():
+                    continue
+                if postcode and postcode.lower() != hospital.get("postcode", "").lower():
+                    continue
+                available.append({"name": doctor_name, "specialty": details["specialty"], "location": loc})
+
+        if available:
+            doctor_names = ", ".join([doc["name"] for doc in available])
+            response_text = f"Here are available {specialty} doctors in {city or postcode}: {doctor_names}. Please select one."
+        else:
+            response_text = f"Sorry, no {specialty} doctors found in {city or postcode}."
+
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [response_text]}}
+                ]
+            }
+        })
+
+    # --- Tag: Confirm Booking ---
+    elif tag == "confirm_booking":
+        name = params.get("person_name", {})
+        first_name = name.get("first") if isinstance(name, dict) else name
+        mobile = params.get("phone_number")
+        email = params.get("email")
+        tour_datetime = params.get("tour_datetime")
+        doctor_name = params.get("doctor_name")
+
+        if not doctor_name or doctor_name not in DOCTORS:
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [{"text": {"text": ["Doctor not found."]}}]
+                }
+            })
+
+        location_name = DOCTORS[doctor_name]["locations"][0]
+        hospital_info = HOSPITALS.get(location_name, {})
+
+        formatted_date_time = "your selected date and time"
+        if tour_datetime:
+            try:
+                dt_obj = datetime.fromisoformat(tour_datetime)
+                formatted_date_time = dt_obj.strftime("%A, %d %B %Y at %I:%M %p")
+            except Exception:
+                pass
+
+        confirmation_message_plain = (
+            f"Booking Confirmed!\n\n"
+            f"Doctor: {doctor_name}\n"
+            f"Specialty: {DOCTORS[doctor_name]['specialty']}\n"
+            f"Location: {location_name}\n"
+            f"Address: {hospital_info.get('address', 'N/A')}\n"
+            f"Phone: {hospital_info.get('phone', 'N/A')}\n"
+            f"Date & Time: {formatted_date_time}\n\n"
+            f"A confirmation has been sent to your email ({email}) and WhatsApp ({mobile})."
+        )
+
+        confirmation_message_html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; color: #333;">
+                <h2 style="color:#2a7ae2;">✅ Your Consultation is Confirmed</h2>
+                <p>Dear {first_name or 'Patient'},</p>
+                <p>We are pleased to confirm your consultation:</p>
+                <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+                    <tr><td><b>👨‍⚕️ Doctor:</b></td><td>{doctor_name}</td></tr>
+                    <tr><td><b>🔬 Specialty:</b></td><td>{DOCTORS[doctor_name]['specialty']}</td></tr>
+                    <tr><td><b>🏥 Hospital:</b></td><td>{location_name}</td></tr>
+                    <tr><td><b>📍 Address:</b></td><td>{hospital_info.get('address', 'N/A')}</td></tr>
+                    <tr><td><b>📞 Hospital Phone:</b></td><td>{hospital_info.get('phone', 'N/A')}</td></tr>
+                    <tr><td><b>🗓 Date & Time:</b></td><td>{formatted_date_time}</td></tr>
+                </table>
+                <p>We’ve also sent a copy to your WhatsApp at <b>{mobile}</b>.</p>
+                <p style="margin-top:20px;">If you have any questions, feel free to reply to this email.</p>
+                <p style="color:#555;">Warm regards,<br>Nuffield Health Team</p>
+            </body>
+        </html>
+        """
+
+        # Send email & WhatsApp
+        if email:
+            send_email(email, "✅ Consultation Confirmed", confirmation_message_plain, confirmation_message_html)
+        if mobile:
+            send_whatsapp_message(mobile, confirmation_message_plain)
+
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [confirmation_message_plain]}}
+                ]
+            }
+        })
+
+    # --- Default Handler ---
+    return jsonify({
+        "fulfillment_response": {
             "messages": [
-                {"text": {"text": ["I'm sorry, I didn't understand that. Could you please rephrase?"]}}
+                {"text": {"text": ["Sorry, I couldn’t process that."]}}
             ]
         }
-    }
-
-    try:
-        intent_display_name = req.get("intentInfo", {}).get("displayName")
-        parameters = req.get("sessionInfo", {}).get("parameters", {})
-
-        logging.info(f"Intent: {intent_display_name}")
-        logging.info(f"Parameters: {parameters}")
-
-        # --- BookConsultationIntent ---
-        if intent_display_name == 'BookConsultationIntent':
-            fulfillment_response = {
-                "fulfillmentResponse": {
-                    "messages": [
-                        {"text": {"text": ["Hello, I can help you book a consultation. What specialty are you looking for?"]}}
-                    ]
-                }
-            }
-
-        # --- SpecialtySelection ---
-        elif intent_display_name == 'SpecialtySelection':
-            specialty = parameters.get("specialty")
-            # This is a simplified example. In a real app, you'd filter doctors by specialty
-            fulfillment_response = {
-                "fulfillmentResponse": {
-                    "messages": [
-                        {"text": {"text": [f"Great! Please provide your location (e.g., London E3, UK) to find a hospital near you."]}}
-                    ]
-                }
-            }
-
-        # --- LocationProvided ---
-        elif intent_display_name == 'LocationProvided':
-            # In a real app, this would use the location to filter doctors
-            doctor_cards = []
-            for doctor_name, details in DOCTORS.items():
-                doctor_cards.append([
-                    {
-                        "type": "info",
-                        "title": doctor_name,
-                        "subtitle": f"Specialty: {details['specialty']}",
-                        "image": {
-                            "src": {
-                                "rawUrl": f"https://placehold.co/100x100/A020F0/white?text={doctor_name[0]}{doctor_name.split()[-1][0]}"
-                            }
-                        }
-                    },
-                    {
-                        "type": "chips",
-                        "options": [
-                            {"text": "Book now", "value": f"Book a consultation with {doctor_name}"}
-                        ]
-                    }
-                ])
-            
-            doctor_list_payload = {
-                "richContent": doctor_cards
-            }
-            
-            fulfillment_response = {
-                "fulfillmentResponse": {
-                    "messages": [
-                        {"text": {"text": ["Here are the consultants in your area:"]}},
-                        {"payload": doctor_list_payload}
-                    ]
-                }
-            }
-
-        
-        # --- SelectDoctor ---
-        elif intent_display_name == 'SelectDoctorFromList':
-            doctor_name = parameters.get("doctor_name")
-            if doctor_name in DOCTORS:
-                # Get first available location
-                locations = DOCTORS[doctor_name]["locations"]
-                location = locations[0]
-                
-                # Fetch available dates from dummy data
-                available_dates = DOCTORS[doctor_name]["available_dates"][location]
-                
-                # Create chips for dates and times
-                date_time_chips = []
-                for entry in available_dates:
-                    date_obj = datetime.strptime(entry["date"], "%Y-%m-%d")
-                    for time_slot in entry["times"]:
-                        combined_dt_str = f"{date_obj.strftime('%Y-%m-%d')}T{time_slot}:00"
-                        date_time_chips.append({
-                            "text": f"{date_obj.strftime('%a %d %b')}, {time_slot}",
-                            "value": combined_dt_str
-                        })
-                
-                combined_payload = {
-                    "richContent": [
-                        [
-                            {
-                                "type": "chips",
-                                "options": date_time_chips
-                            }
-                        ]
-                    ]
-                }
-                
-                fulfillment_response = {
-                    "fulfillmentResponse": {
-                        "messages": [
-                            {"text": {"text": [f"Great! Here are the available consultation times with {doctor_name} at {location}. Please select one to continue."]}},
-                            {"payload": combined_payload}
-                        ]
-                    }
-                }
-            else:
-                fulfillment_response = {
-                    "fulfillmentResponse": {
-                        "messages": [
-                            {"text": {"text": ["Sorry, I couldn't find available times for that doctor."]}}
-                        ]
-                    }
-                }
-
-        # --- ConfirmBooking ---
-        elif intent_display_name == 'ConfirmBooking':
-            name = parameters.get("person_name", {})
-            mobile = parameters.get("phone_number")
-            email = parameters.get("email")
-            tour_datetime = parameters.get("tour_datetime")
-
-            doctor_name = parameters.get("doctor_name")
-            location_name = DOCTORS[doctor_name]["locations"][0]
-
-            # In a real app, you would parse the date/time string from the webhook
-            # For this example, we'll use a placeholder
-            formatted_date_time = "your selected date and time"
-            
-            # Create a simple confirmation message
-            confirmation_message_plain = (
-                f"Booking Confirmed!\n\n"
-                f"Doctor: {doctor_name}\n"
-                f"Location: {location_name}\n"
-                f"Date & Time: {formatted_date_time}\n\n"
-                "A confirmation has been sent to your email and WhatsApp."
-            )
-            
-            # Save booking to Firestore (not implemented, but this is where it would go)
-            # if db:
-            #     db.collection("consultations").add(...)
-            
-            # Send confirmation emails and WhatsApp messages
-            # send_email(email, "Consultation Confirmed", confirmation_message_plain, "<html>...</html>")
-            # send_whatsapp_message(mobile, confirmation_message_plain)
-            
-            fulfillment_response = {
-                "fulfillmentResponse": {
-                    "messages": [
-                        {"text": {"text": [confirmation_message_plain]}}
-                    ]
-                }
-            }
-
-    except Exception as e:
-        logging.error(f"Webhook error: {e}")
-        fulfillment_response = {
-            "fulfillmentResponse": {
-                "messages": [{"text": {"text": [f"Unexpected error: {e}"]}}]
-            }
-        }
-
-    return jsonify(fulfillment_response)
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

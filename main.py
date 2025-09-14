@@ -367,7 +367,7 @@ def webhook():
         first_name = name.get("first") if isinstance(name, dict) else name
         mobile = params.get("phone_number")
         email = params.get("email")
-        tour_datetime = params.get("tour_datetime")
+        appointment_datetime = params.get("appointment_datetime")
         doctor_name = params.get("doctor_name")
 
         if not doctor_name or doctor_name not in DOCTORS:
@@ -381,12 +381,12 @@ def webhook():
         hospital_info = HOSPITALS.get(location_name, {})
 
         formatted_date_time = "your selected date and time"
-        if tour_datetime:
+        if appointment_datetime:
             try:
-                dt_obj = datetime.fromisoformat(tour_datetime)
+                dt_obj = datetime.fromisoformat(appointment_datetime)
                 formatted_date_time = dt_obj.strftime("%A, %d %B %Y at %I:%M %p")
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f"Failed to parse appointment_datetime: {appointment_datetime}, error: {e}")
 
         confirmation_message_plain = (
             f"Booking Confirmed!\n\n"

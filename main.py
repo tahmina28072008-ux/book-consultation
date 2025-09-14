@@ -179,7 +179,7 @@ def send_email(to_email, subject, plain_body, html_body):
         logging.error(f"Failed to send email: {e}")
         return False
 
-# --- Webhook ---
+# --- Webhook endpoint (for Dialogflow/etc) ---
 @app.route('/webhook', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
@@ -314,6 +314,21 @@ def webhook():
             ]
         }
     })
+
+# --- New endpoint for the simple UI to fetch doctor data ---
+@app.route('/get_doctors', methods=['GET'])
+def get_doctors_for_ui():
+    """
+    A simple endpoint to return all doctor data.
+    This is for demonstration purposes for the frontend UI.
+    """
+    available_doctors = []
+    for doctor_name, details in DOCTORS.items():
+        doctor_details = details.copy()
+        doctor_details["name"] = doctor_name
+        available_doctors.append(doctor_details)
+    
+    return jsonify({"doctor_list": available_doctors})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

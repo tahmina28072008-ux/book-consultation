@@ -234,21 +234,17 @@ def webhook():
                 available_doctors.append(doctor_details)
 
         if available_doctors:
-            # --- Start of new logic to create the rich card response ---
             doctor_text_lines = ["Here are some of our doctors who match your search. Which one would you like to know more about?"]
             chips_options = []
             
             for i, doctor in enumerate(available_doctors, 1):
-                # Build the text part for the message
                 text_line = (
                     f"\n{i}. {doctor['name']}\n"
                     f"   Specialty: {doctor['specialty']}\n"
-                    f"   Qualifications: {doctor['qualifications']}\n"
                     f"   Locations: {', '.join(doctor['locations'])}"
                 )
                 doctor_text_lines.append(text_line)
 
-                # Build the chips for the rich content
                 chips_options.append({
                     "text": f"View {doctor['name']}",
                     "value": f"View {doctor['name']}"
@@ -262,7 +258,6 @@ def webhook():
                     "messages": [card_text_message, {"payload": chips_payload}]
                 }
             })
-            # --- End of new logic ---
         else:
             response_text = f"Sorry, no {specialty} doctors found in {city or postcode}."
             return jsonify({
@@ -270,6 +265,54 @@ def webhook():
                     "messages": [
                         {"text": {"text": [response_text]}}
                     ]
+                }
+            })
+
+    # --- Tag: Get Doctor Details ---
+    elif tag == "get_doctor_details":
+        doctor_name = params.get("doctor_name")
+        doctor_details = DOCTORS.get(doctor_name)
+
+        if doctor_details:
+            # Build the rich card response with more details
+            locations_text = ", ".join(doctor_details.get("locations", []))
+            services_text = ", ".join(doctor_details.get("services", []))
+
+            detail_text = (
+                f"Here are the details for {doctor_name}:\n\n"
+                f"Specialty: {doctor_details.get('specialty')}\n"
+                f"Qualifications: {doctor_details.get('qualifications')}\n"
+                f"Practising Since: {doctor_details.get('practisingSince')}\n"
+                f"Locations: {locations_text}\n"
+                f"Services: {services_text}\n"
+                f"Initial Consultation Fee: £{doctor_details['fees'].get('Initial consultation')}\n\n"
+                "Would you like to book an appointment with this doctor?"
+            )
+
+            # Chips to book appointment or go back
+            chips_payload = {
+                "richContent": [
+                    [
+                        {"type": "chips", "options": [
+                            {"text": "Book an Appointment", "value": f"Book an appointment with {doctor_name}"},
+                            {"text": "Go Back", "value": "Go back to doctor list"}
+                        ]}
+                    ]
+                ]
+            }
+
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [
+                        {"text": {"text": [detail_text]}},
+                        {"payload": chips_payload}
+                    ]
+                }
+            })
+        else:
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [{"text": {"text": ["Sorry, I couldn't find details for that doctor."]}}]
                 }
             })
 
@@ -525,16 +568,6 @@ def serve_doctors_html():
             });
         }
 
-        // Close modal functionality
-        closeModalButton.addEventListener('click', () => {
-            appointmentModal.classList.remove('modal-fade-enter-active');
-            appointmentModal.classList.add('modal-fade-exit-active');
-            setTimeout(() => {
-                appointmentModal.classList.add('hidden');
-                appointmentModal.classList.remove('flex', 'modal-fade-exit-active');
-            }, 300); // Wait for transition to finish
-        });
-
         // Search functionality
         searchInput.addEventListener('keyup', (event) => {
             const searchTerm = event.target.value.toLowerCase();
@@ -545,6 +578,16 @@ def serve_doctors_html():
                 (doctor.locations && doctor.locations.some(loc => loc.toLowerCase().includes(searchTerm)))
             );
             renderDoctors(filteredDoctors);
+        });
+
+        // Close modal functionality
+        closeModalButton.addEventListener('click', () => {
+            appointmentModal.classList.remove('modal-fade-enter-active');
+            appointmentModal.classList.add('modal-fade-exit-active');
+            setTimeout(() => {
+                appointmentModal.classList.add('hidden');
+                appointmentModal.classList.remove('flex', 'modal-fade-exit-active');
+            }, 300); // Wait for transition to finish
         });
 
         // Initial fetch and render

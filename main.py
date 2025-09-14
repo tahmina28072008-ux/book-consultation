@@ -15,9 +15,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 app = Flask(__name__)
 
 # --- Twilio Setup ---
-account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
-auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
-twilio_client = Client(account_sid, auth_token) if account_sid and auth_token else None
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID") # Replace with your Account SID
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN") # Replace with your Auth Token
+TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER") # Replace with your Twilio phone number
 
 # --- Firestore Setup ---
 db = None
@@ -156,25 +156,34 @@ HOSPITALS = {
 }
 
 # --- Helper Functions ---
-def send_whatsapp_message(to_number, message_body):
-    from_number = "whatsapp:+14155238886"
-    if not twilio_client:
-        logging.error("Twilio client not initialized.")
-        return False, "Twilio client not initialized."
+def format_phone_number(phone_number):
+    """Formats a phone number to E.164 format."""
+    if not phone_number.startswith('+'):
+        if phone_number.startswith('0'):
+            # Assume UK number and prepend +44
+            return f'+44{phone_number[1:]}'
+        # Otherwise, assume it's already in a form like 447...
+        return f'+{phone_number}'
+    return phone_number
+
+def send_whatsapp_message(to_number, body):
+    """Sends a WhatsApp message using the Twilio API."""
     try:
-        twilio_client.messages.create(
-            to=f"whatsapp:{to_number}",
-            from_=from_number,
-            body=message_body
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        # Twilio requires the number to be in the format 'whatsapp:+<number>'
+        message = client.messages.create(
+            from_=f'whatsapp:{TWILIO_PHONE_NUMBER}',
+            body=body,
+            to=f'whatsapp:{to_number}'
         )
-        return True, "Message sent successfully."
+        logging.info(f"WhatsApp message sent to {to_number}: {message.sid}")
     except Exception as e:
         logging.error(f"Failed to send WhatsApp message: {e}")
-        return False, f"Failed to send message: {e}"
+
 
 def send_email(to_email, subject, plain_body, html_body):
-    sender_email = os.environ.get("EMAIL_USER")
-    sender_password = os.environ.get("EMAIL_PASSWORD")
+    sender_email = os.environ.get("SENDER_EMAIL")
+    sender_password = os.environ.get("SENDER_PASSWORD")
     if not sender_email or not sender_password:
         logging.error("Email credentials not found.")
         return False

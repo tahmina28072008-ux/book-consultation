@@ -240,8 +240,8 @@ def webhook():
             for i, doctor in enumerate(available_doctors, 1):
                 text_line = (
                     f"\n{i}. {doctor['name']}\n"
-                    f"   Specialty: {doctor['specialty']}\n"
-                    f"   Locations: {', '.join(doctor['locations'])}"
+                    f"    Specialty: {doctor['specialty']}\n"
+                    f"    Locations: {', '.join(doctor['locations'])}"
                 )
                 doctor_text_lines.append(text_line)
 
@@ -304,7 +304,7 @@ def webhook():
                 f"Locations: {locations_text}\n"
                 f"Services: {services_text}\n"
                 f"Initial Consultation Fee: £{doctor_details['fees'].get('Initial consultation')}\n\n"
-                "📅 Available Dates & Times:\n" + "\n".join(schedule_text)
+                f"📅 Available Dates & Times:\n" + "\n".join(schedule_text)
             )
 
             # The full rich response payload with chips
@@ -415,8 +415,6 @@ def webhook():
             ]
         }
     })
-
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

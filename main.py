@@ -38,8 +38,22 @@ except ValueError:
 
 # --- Dummy Data ---
 DOCTORS = {
+    "Mr Md Zaker Ullah": {
+        "specialty": "General Surgery, Breast Surgery",
+        "qualifications": "FRCS, MBBS, FRCSEd",
+        "locations": ["The Holly Hospital"],
+        "fees": {"Initial consultation": 300},
+        "available_dates": {
+            "The Holly Hospital": [
+                {"date": "2025-09-16", "times": ["15:45"]},
+                {"date": "2025-09-18", "times": ["10:15", "10:45", "11:00"]},
+                {"date": "2025-09-23", "times": ["14:45", "15:15", "15:30"]},
+            ]
+        }
+    },
     "Miss Tasha Gandamihardja": {
         "specialty": "General Surgery, Breast Surgery",
+        "qualifications": "MBBS, FRACS, Grad Dip Clin Epi, FRCPSG",
         "locations": ["Nuffield Health Brentwood Hospital", "The Holly Hospital"],
         "fees": {"Initial consultation": 300},
         "available_dates": {
@@ -55,6 +69,7 @@ DOCTORS = {
     },
     "Dr. Alice Smith": {
         "specialty": "Cardiology",
+        "qualifications": "MD, FACC",
         "locations": ["Nuffield Health Brentwood Hospital"],
         "fees": {"Initial consultation": 350},
         "available_dates": {
@@ -66,6 +81,7 @@ DOCTORS = {
     },
     "Dr. Ben Carter": {
         "specialty": "Neurology",
+        "qualifications": "MD, PhD, FRCP",
         "locations": ["The Holly Hospital"],
         "fees": {"Initial consultation": 320},
         "available_dates": {
@@ -77,6 +93,7 @@ DOCTORS = {
     },
     "Dr. Emily Davis": {
         "specialty": "Dermatology",
+        "qualifications": "MBBS, MRCP",
         "locations": ["Nuffield Health Brentwood Hospital", "The Holly Hospital"],
         "fees": {"Initial consultation": 280},
         "available_dates": {
@@ -93,6 +110,7 @@ DOCTORS = {
     },
     "Dr. Frank Green": {
         "specialty": "Orthopaedic Surgery",
+        "qualifications": "MD, FACS",
         "locations": ["The Holly Hospital"],
         "fees": {"Initial consultation": 400},
         "available_dates": {
@@ -176,31 +194,44 @@ def webhook():
         postcode = params.get("postcode")
         specialty = params.get("specialty")
 
-        available = []
+        available_doctors = []
         for doctor_name, details in DOCTORS.items():
             if specialty and specialty.lower() not in details["specialty"].lower():
                 continue
+
+            matching_locations = []
             for loc in details["locations"]:
                 hospital = HOSPITALS.get(loc, {})
                 if city and city.lower() not in hospital.get("city", "").lower():
                     continue
                 if postcode and postcode.lower() != hospital.get("postcode", "").lower():
                     continue
-                available.append({"name": doctor_name, "specialty": details["specialty"], "location": loc})
+                matching_locations.append(loc)
 
-        if available:
-            doctor_names = ", ".join([doc["name"] for doc in available])
-            response_text = f"Here are available {specialty} doctors in {city or postcode}: {doctor_names}. Please select one."
+            if matching_locations:
+                doctor_details = details.copy()
+                doctor_details["name"] = doctor_name
+                doctor_details["locations"] = matching_locations
+                doctor_details["available_dates"] = {loc: dates for loc, dates in details.get("available_dates", {}).items() if loc in matching_locations}
+                available_doctors.append(doctor_details)
+
+        if available_doctors:
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [
+                        {"payload": {"doctor_list": available_doctors}}
+                    ]
+                }
+            })
         else:
             response_text = f"Sorry, no {specialty} doctors found in {city or postcode}."
-
-        return jsonify({
-            "fulfillment_response": {
-                "messages": [
-                    {"text": {"text": [response_text]}}
-                ]
-            }
-        })
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [
+                        {"text": {"text": [response_text]}}
+                    ]
+                }
+            })
 
     # --- Tag: Confirm Booking ---
     elif tag == "confirm_booking":

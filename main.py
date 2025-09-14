@@ -383,10 +383,26 @@ def webhook():
         formatted_date_time = "your selected date and time"
         if appointment_datetime:
             try:
-                dt_obj = datetime.fromisoformat(appointment_datetime)
+                if isinstance(appointment_datetime, dict):
+                    # Extract values from structured object
+                    year = appointment_datetime.get("year")
+                    month = appointment_datetime.get("month")
+                    day = appointment_datetime.get("day")
+                    hours = appointment_datetime.get("hours", 0)
+                    minutes = appointment_datetime.get("minutes", 0)
+                    seconds = appointment_datetime.get("seconds", 0)
+
+                    dt_obj = datetime(year, month, day, hours, minutes, seconds)
+                else:
+                    # Handle ISO 8601 string
+                    dt_obj = datetime.fromisoformat(appointment_datetime)
+
                 formatted_date_time = dt_obj.strftime("%A, %d %B %Y at %I:%M %p")
+
             except Exception as e:
-                logging.warning(f"Failed to parse appointment_datetime: {appointment_datetime}, error: {e}")
+                logging.warning(
+                    f"Failed to parse appointment_datetime: {appointment_datetime}, error: {e}"
+                )
 
         confirmation_message_plain = (
             f"Booking Confirmed!\n\n"

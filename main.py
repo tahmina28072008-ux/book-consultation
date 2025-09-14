@@ -14,11 +14,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 app = Flask(__name__)
 
-# --- Twilio Setup ---
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID") # Replace with your Account SID
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN") # Replace with your Auth Token
-TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER") # Replace with your Twilio phone number
-
 
 # --- Firestore Setup ---
 db = None
@@ -156,30 +151,52 @@ HOSPITALS = {
     }
 }
 
-# --- Helper Functions ---
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID") # Replace with your Account SID
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN") # Replace with your Auth Token
+TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER") # Replace with your Twilio phone number
+
 def format_phone_number(phone_number):
-    """Formats a phone number to E.164 format."""
+    """
+    Formats a phone number to E.164 format.
+    Handles common UK number formats (e.g., '07...' or '447...').
+    """
+    phone_number = phone_number.replace(' ', '').replace('-', '')
     if not phone_number.startswith('+'):
         if phone_number.startswith('0'):
-            # Assume UK number and prepend +44
+            # This is the fix for your specific error.
+            # It handles numbers starting with '0' by removing the '0' and adding '+44'
             return f'+44{phone_number[1:]}'
-        # Otherwise, assume it's already in a form like 447...
-        return f'+{phone_number}'
+        elif phone_number.startswith('44'):
+            # Assumes UK number and adds the '+'
+            return f'+{phone_number}'
+        else:
+            # Fallback for other formats, might need to be more specific
+            logging.warning(f"Could not reliably format phone number: {phone_number}")
+            return f'+{phone_number}'
     return phone_number
 
 def send_whatsapp_message(to_number, body):
     """Sends a WhatsApp message using the Twilio API."""
     try:
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        # Twilio requires the number to be in the format 'whatsapp:+<number>'
+        formatted_to_number = format_phone_number(to_number)
+
+        # Log the numbers to confirm correct formatting before sending
+        logging.info(f"Attempting to send message from {TWILIO_PHONE_NUMBER} to {formatted_to_number}")
+
         message = client.messages.create(
             from_=f'whatsapp:{TWILIO_PHONE_NUMBER}',
             body=body,
-            to=f'whatsapp:{to_number}'
+            to=f'whatsapp:{formatted_to_number}'
         )
-        logging.info(f"WhatsApp message sent to {to_number}: {message.sid}")
+        logging.info(f"WhatsApp message sent to {formatted_to_number}: {message.sid}")
+        return message.sid
+
     except Exception as e:
-        logging.error(f"Failed to send WhatsApp message: {e}")
+        # A more specific error log with the phone number that failed
+        logging.error(f"Failed to send WhatsApp message to {to_number}: {e}")
+        return None
+
 
 
 def send_email(to_email, subject, plain_body, html_body):

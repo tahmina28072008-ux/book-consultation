@@ -384,14 +384,14 @@ def webhook():
         if appointment_datetime:
             try:
                 if isinstance(appointment_datetime, dict):
-                    # Extract values from structured object
-                    year = appointment_datetime.get("year")
-                    month = appointment_datetime.get("month")
-                    day = appointment_datetime.get("day")
-                    hours = appointment_datetime.get("hours", 0)
-                    minutes = appointment_datetime.get("minutes", 0)
-                    seconds = appointment_datetime.get("seconds", 0)
-
+                    # Extract values and cast to int
+                    year = int(appointment_datetime.get("year", 0))
+                    month = int(appointment_datetime.get("month", 1))
+                    day = int(appointment_datetime.get("day", 1))
+                    hours = int(appointment_datetime.get("hours", 0))
+                    minutes = int(appointment_datetime.get("minutes", 0))
+                    seconds = int(appointment_datetime.get("seconds", 0))
+                
                     dt_obj = datetime(year, month, day, hours, minutes, seconds)
                 else:
                     # Handle ISO 8601 string

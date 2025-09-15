@@ -134,6 +134,25 @@ DOCTORS = {
             ]
         },
         "services": ['Knee Arthroscopy', 'Hip Replacement', 'Sports Injuries']
+    },
+    "Dr Iffat Azim": {
+        "specialty": "General Practice",
+        "qualifications": "MBBS, MPH",
+        "gmcNumber": "5166467",
+        "practisingSince": 1991,
+        "locations": ["The Holly Hospital", "Nuffield Health Brentwood Hospital"],
+        "fees": {"Initial consultation": 250},
+        "available_dates": {
+            "The Holly Hospital": [
+                {"date": "2025-09-17", "times": ["09:00", "09:30"]},
+                {"date": "2025-09-24", "times": ["10:00", "10:30"]},
+            ],
+            "Nuffield Health Brentwood Hospital": [
+                {"date": "2025-09-19", "times": ["14:00", "14:30"]},
+                {"date": "2025-09-26", "times": ["15:00", "15:30"]},
+            ]
+        },
+        "services": ['General Health Check-up', 'Preventative Medicine', 'Chronic Disease Management']
     }
 }
 HOSPITALS = {
@@ -267,8 +286,8 @@ def webhook():
             for i, doctor in enumerate(available_doctors, 1):
                 text_line = (
                     f"\n{i}. {doctor['name']}\n"
-                    f"    Specialty: {doctor['specialty']}\n"
-                    f"    Locations: {', '.join(doctor['locations'])}"
+                    f"     Specialty: {doctor['specialty']}\n"
+                    f"     Locations: {', '.join(doctor['locations'])}"
                 )
                 doctor_text_lines.append(text_line)
 
@@ -295,14 +314,23 @@ def webhook():
                 }
             })
 
-    # --- Tag: Get Doctor Details (Updated to include times as chips) ---
+    # --- Tag: Get Doctor Details (Updated to include times as chips and full hospital details) ---
     elif tag == "get_doctor_details":
         doctor_name = params.get("doctor_name")
         doctor_details = DOCTORS.get(doctor_name)
 
         if doctor_details:
             # Build the rich card response with more details
-            locations_text = ", ".join(doctor_details.get("locations", []))
+            locations_and_details_text = []
+            for loc_name in doctor_details.get("locations", []):
+                hospital_info = HOSPITALS.get(loc_name, {})
+                location_text = (
+                    f"🏥 {loc_name}\n"
+                    f"     📍 Address: {hospital_info.get('address', 'N/A')}, {hospital_info.get('postcode', 'N/A')}\n"
+                    f"     📞 Phone: {hospital_info.get('phone', 'N/A')}"
+                )
+                locations_and_details_text.append(location_text)
+            
             services_text = ", ".join(doctor_details.get("services", []))
 
             # Build schedule text and chips
@@ -315,7 +343,7 @@ def webhook():
                     date_obj = datetime.strptime(slot["date"], "%Y-%m-%d")
                     date_str = date_obj.strftime("%a, %d %b")
                     times = ", ".join(slot["times"]) if slot["times"] else "No appointments"
-                    schedule_text.append(f"    📅 {date_str}: {times}")
+                    schedule_text.append(f"     📅 {date_str}: {times}")
 
                     for t in slot["times"]:
                         chips_options.append({
@@ -325,12 +353,12 @@ def webhook():
 
             detail_text = (
                 f"Here are the details for {doctor_name}:\n\n"
-                f"Specialty: {doctor_details.get('specialty')}\n"
-                f"Qualifications: {doctor_details.get('qualifications')}\n"
+                f"🩺 Specialty: {doctor_details.get('specialty')}\n"
+                f"🎓 Qualifications: {doctor_details.get('qualifications')}\n"
                 f"Practising Since: {doctor_details.get('practisingSince')}\n"
-                f"Locations: {locations_text}\n"
-                f"Services: {services_text}\n"
                 f"Initial Consultation Fee: £{doctor_details['fees'].get('Initial consultation')}\n\n"
+                f"🏥 Locations:\n" + "\n".join(locations_and_details_text) + "\n\n"
+                f"Services: {services_text}\n"
                 f"📅 Available Dates & Times:\n" + "\n".join(schedule_text)
             )
 

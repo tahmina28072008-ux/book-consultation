@@ -448,10 +448,10 @@ def webhook():
         <html>
             <body style="font-family: Arial, sans-serif; color: #333;">
                 <h2 style="color:#2a7ae2;">✅ Your Consultation is Confirmed</h2>
-                <p>Dear {first_name},</p>
+                <p>Dear {first_name or 'Patient'},</p>
                 <p>We are pleased to confirm your consultation:</p>
                 <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
-                    <tr><td><b>👤 Patient:</b></td><td>{name}</td></tr>
+                    
                     <tr><td><b>👨‍⚕️ Doctor:</b></td><td>{doctor_name}</td></tr>
                     <tr><td><b>🔬 Specialty:</b></td><td>{DOCTORS[doctor_name]['specialty']}</td></tr>
                     <tr><td><b>🏥 Hospital:</b></td><td>{location_name}</td></tr>

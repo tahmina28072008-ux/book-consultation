@@ -434,7 +434,6 @@ def webhook():
 
         confirmation_message_plain = (
             f"Booking Confirmed!\n\n"
-            f"Patient: {first_name}\n"
             f"Doctor: {doctor_name}\n"
             f"Specialty: {DOCTORS[doctor_name]['specialty']}\n"
             f"Location: {location_name}\n"

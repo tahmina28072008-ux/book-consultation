@@ -458,7 +458,7 @@ def webhook():
                     <tr><td><b>📞 Hospital Phone:</b></td><td>{hospital_info.get('phone', 'N/A')}</td></tr>
                     <tr><td><b>🗓 Date & Time:</b></td><td>{formatted_date_time}</td></tr>
                 </table>
-                <p>A confirmation has also been sent to your <b>✉️ email ({email})</b> and <b>📞 WhatsApp ({mobile})</b>.</p>
+                <p>A confirmation has also been sent to your 📞 WhatsApp ({mobile})</b>.</p>
                 <p style="margin-top:20px;">If you have any questions, feel free to reply to this email.</p>
                 <p style="color:#555;">Warm regards,<br>Nuffield Health Team</p>
             </body>

@@ -419,7 +419,7 @@ def webhook():
                     hours = int(appointment_datetime.get("hours", 0))
                     minutes = int(appointment_datetime.get("minutes", 0))
                     seconds = int(appointment_datetime.get("seconds", 0))
-                
+                    
                     dt_obj = datetime(year, month, day, hours, minutes, seconds)
                 else:
                     # Handle ISO 8601 string
@@ -434,13 +434,14 @@ def webhook():
 
         confirmation_message_plain = (
             f"Booking Confirmed!\n\n"
+            f"Patient: {first_name}\n"
             f"Doctor: {doctor_name}\n"
             f"Specialty: {DOCTORS[doctor_name]['specialty']}\n"
             f"Location: {location_name}\n"
             f"Address: {hospital_info.get('address', 'N/A')}\n"
             f"Phone: {hospital_info.get('phone', 'N/A')}\n"
             f"Date & Time: {formatted_date_time}\n\n"
-            f"A confirmation has been sent to your email ({email}) and WhatsApp ({mobile})."
+            f"A confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile})."
         )
 
         confirmation_message_html = f"""
@@ -450,6 +451,7 @@ def webhook():
                 <p>Dear {first_name or 'Patient'},</p>
                 <p>We are pleased to confirm your consultation:</p>
                 <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+                    <tr><td><b>👤 Patient:</b></td><td>{first_name}</td></tr>
                     <tr><td><b>👨‍⚕️ Doctor:</b></td><td>{doctor_name}</td></tr>
                     <tr><td><b>🔬 Specialty:</b></td><td>{DOCTORS[doctor_name]['specialty']}</td></tr>
                     <tr><td><b>🏥 Hospital:</b></td><td>{location_name}</td></tr>
@@ -457,7 +459,7 @@ def webhook():
                     <tr><td><b>📞 Hospital Phone:</b></td><td>{hospital_info.get('phone', 'N/A')}</td></tr>
                     <tr><td><b>🗓 Date & Time:</b></td><td>{formatted_date_time}</td></tr>
                 </table>
-                <p>We’ve also sent a copy to your WhatsApp at <b>{mobile}</b>.</p>
+                <p>A confirmation has also been sent to your <b>✉️ email ({email})</b> and <b>📞 WhatsApp ({mobile})</b>.</p>
                 <p style="margin-top:20px;">If you have any questions, feel free to reply to this email.</p>
                 <p style="color:#555;">Warm regards,<br>Nuffield Health Team</p>
             </body>

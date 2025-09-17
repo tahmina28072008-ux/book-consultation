@@ -590,7 +590,7 @@ def webhook():
                     </div>
                     
                     <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                        A confirmation has also been sent to your <strong style="color: #2a7ae2;">✉️ email ({email})</strong> and <strong style="color: #2a7ae2;">📞 WhatsApp ({mobile})</strong>.
+                        A confirmation has also been sent to your <strong style="color: #2a7ae2;">📞 WhatsApp ({mobile})</strong>.
                     </p>
                     
                     <!-- Call to Action Button -->

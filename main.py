@@ -488,7 +488,7 @@ def webhook():
                 )
 
         # Calculate the total bill based on the payment method
-        base_fee = DOCTORS[doctor_name]['fees'].get('Initial consultation', 0)
+        base_fee = DOCTORS[doctor_name]['fees'].get('Initial consultation')
         total_bill = 0
         if payment_method == "Pay for myself":
             total_bill = base_fee

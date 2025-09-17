@@ -43,8 +43,8 @@ DOCTORS = {
         "fees": {"Initial consultation": 300},
         "available_dates": {
             "The Holly Hospital": [
-                {"date": "2025-09-16", "times": ["15:45"]},
-                {"date": "2025-09-18", "times": ["10:15", "10:45", "11:00"]},
+                {"date": "2025-09-19", "times": ["15:45"]},
+                {"date": "2025-09-22", "times": ["10:15", "10:45", "11:00"]},
                 {"date": "2025-09-23", "times": ["14:45", "15:15", "15:30"]},
             ]
         },
@@ -59,7 +59,7 @@ DOCTORS = {
         "fees": {"Initial consultation": 300},
         "available_dates": {
             "Nuffield Health Brentwood Hospital": [
-                {"date": "2025-09-18", "times": ["16:30", "16:45"]},
+                {"date": "2025-09-19", "times": ["16:30", "16:45"]},
                 {"date": "2025-09-25", "times": ["16:30", "16:45"]},
             ],
             "The Holly Hospital": [
@@ -108,12 +108,12 @@ DOCTORS = {
         "fees": {"Initial consultation": 280},
         "available_dates": {
             "Nuffield Health Brentwood Hospital": [
-                {"date": "2025-09-17", "times": ["09:00", "09:30", "10:00"]},
+                {"date": "2025-09-19", "times": ["09:00", "09:30", "10:00"]},
                 {"date": "2025-09-24", "times": ["09:00", "09:30", "10:00"]},
                 {"date": "2025-10-01", "times": ["09:00", "09:30"]},
             ],
             "The Holly Hospital": [
-                {"date": "2025-09-16", "times": ["13:00", "13:30", "14:00"]},
+                {"date": "2025-09-22", "times": ["13:00", "13:30", "14:00"]},
                 {"date": "2025-09-23", "times": ["13:00", "13:30", "14:00"]},
             ]
         },
@@ -128,7 +128,7 @@ DOCTORS = {
         "fees": {"Initial consultation": 400},
         "available_dates": {
             "The Holly Hospital": [
-                {"date": "2025-09-18", "times": ["11:00", "11:30", "12:00"]},
+                {"date": "2025-09-19", "times": ["11:00", "11:30", "12:00"]},
                 {"date": "2025-09-25", "times": ["11:00", "11:30", "12:00"]},
                 {"date": "2025-10-02", "times": ["11:00", "11:30"]},
             ]
@@ -144,7 +144,7 @@ DOCTORS = {
         "fees": {"Initial consultation": 250},
         "available_dates": {
             "The Holly Hospital": [
-                {"date": "2025-09-17", "times": ["09:00", "09:30"]},
+                {"date": "2025-09-19", "times": ["09:00", "09:30"]},
                 {"date": "2025-09-24", "times": ["10:00", "10:30"]},
             ],
             "Nuffield Health Brentwood Hospital": [
@@ -367,7 +367,7 @@ def webhook():
             chips_payload = {
                 "richContent": [
                     [
-                        {"type": "chips", "options": chips_options[:8]},  # Limit chips to 8 per row
+                        {"type": "chips", "options": chips_options[:8]}, 
                         {"type": "chips", "options": [
                             {"text": "Go Back", "value": "Go back to doctor list"}
                         ]}
@@ -396,14 +396,28 @@ def webhook():
         chips_payload = {
             "richContent": [
                 [
-                    {"type": "chips", "options": [
-                        {"text": "Pay for myself", "value": "Pay for myself"},
-                        {"text": "I have medical insurance", "value": "I have medical insurance"}
-                    ]}
+                    {
+                        "type": "chips",
+                        "options": [
+                            {
+                                "text": "Pay for myself",
+                                "event": {
+                                    "name": "set_payment_method",
+                                    "parameters": {"payment_method": "self"}
+                                }
+                            },
+                            {
+                                "text": "I have medical insurance",
+                                "event": {
+                                    "name": "set_payment_method",
+                                    "parameters": {"payment_method": "insurance"}
+                                }
+                            }
+                        ]
+                    }
                 ]
             ]
         }
-        
         return jsonify({
             "fulfillment_response": {
                 "messages": [
@@ -412,7 +426,7 @@ def webhook():
                 ]
             }
         })
-        
+    
     # --- New Tag: Ask for Insurance Details ---
     elif tag == "ask_for_insurance_details":
         response_text = "Please provide your Insurer, Policy number, and Authorisation code."
@@ -613,15 +627,15 @@ def webhook():
                 ]
             }
         })
-
-    # --- Default Handler ---
-    return jsonify({
-        "fulfillment_response": {
-            "messages": [
-                {"text": {"text": ["Sorry, I couldn’t process that."]}}
-            ]
-        }
-    })
+    else:
+        # --- Default Handler ---
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": ["Sorry, I couldn’t process that."]}}
+                ]
+            }
+        })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

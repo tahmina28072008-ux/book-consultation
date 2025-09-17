@@ -237,11 +237,12 @@ def send_email(to_email, subject, plain_body, html_body):
         server.starttls()
         server.login(sender_email, sender_password)
         server.send_message(msg)
-        server.quit()
-        return True
     except Exception as e:
         logging.error(f"Failed to send email: {e}")
         return False
+    finally:
+        server.quit()
+    return True
 
 # --- Webhook endpoint (for Dialogflow/etc) ---
 @app.route('/webhook', methods=['POST'])
@@ -389,19 +390,54 @@ def webhook():
                 }
             })
 
-    # --- Tag: Confirm Booking ---
+    # --- Tag: Ask for Payment Method ---
     elif tag == "confirm_booking":
-        name = params.get("person_name")
-        if isinstance(name, dict):
-            first_name = name.get("first") or name.get("original") or "Patient"
-        elif isinstance(name, str):
-            first_name = name.split()[0]
-        else:
-            first_name = "Patient"
+        response_text = "Thank you. How would you like to pay for the consultation?"
+        chips_payload = {
+            "richContent": [
+                [
+                    {"type": "chips", "options": [
+                        {"text": "Pay for myself", "value": "Pay for myself"},
+                        {"text": "I have medical insurance", "value": "I have medical insurance"}
+                    ]}
+                ]
+            ]
+        }
+        
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [response_text]}},
+                    {"payload": chips_payload}
+                ]
+            }
+        })
+        
+    # --- New Tag: Ask for Insurance Details ---
+    elif tag == "ask_for_insurance_details":
+        response_text = "Please provide your Insurer, Policy number, and Authorisation code."
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [response_text]}}
+                ]
+            }
+        })
+
+    # --- New Tag: Final Confirmation and Billing ---
+    elif tag == "final_confirm_and_send":
+        name = params.get("person_name", {})
+        first_name = name.get("name") if isinstance(name, dict) else name
         mobile = params.get("phone_number")
         email = params.get("email")
         appointment_datetime = params.get("appointment_datetime")
         doctor_name = params.get("doctor_name")
+        payment_method = params.get("payment_method")
+        
+        # New parameters for insurance
+        insurer = params.get("insurer")
+        policy_number = params.get("policy_number")
+        authorisation_code = params.get("authorisation_code")
 
         if not doctor_name or doctor_name not in DOCTORS:
             return jsonify({
@@ -437,64 +473,132 @@ def webhook():
                     f"Failed to parse appointment_datetime: {appointment_datetime}, error: {e}"
                 )
 
+        # Calculate the total bill based on the payment method
+        base_fee = DOCTORS[doctor_name]['fees'].get('Initial consultation', 0)
+        total_bill = 0
+        if payment_method == "Pay for myself":
+            total_bill = base_fee
+        elif payment_method == "I have medical insurance":
+            total_bill = base_fee * 0.50  # Example: 50% co-pay
+
+        # Build the confirmation message
         confirmation_message_plain = (
             f"Booking Confirmed!\n\n"
+            f"Patient: {first_name}\n"
             f"Doctor: {doctor_name}\n"
             f"Specialty: {DOCTORS[doctor_name]['specialty']}\n"
             f"Location: {location_name}\n"
             f"Address: {hospital_info.get('address', 'N/A')}\n"
             f"Phone: {hospital_info.get('phone', 'N/A')}\n"
-            f"Date & Time: {formatted_date_time}\n\n"
+            f"Date & Time: {formatted_date_time}\n"
+            f"Payment Method: {payment_method}\n"
+        )
+        if payment_method == "I have medical insurance":
+            confirmation_message_plain += (
+                f"Insurer: {insurer}\n"
+                f"Policy Number: {policy_number}\n"
+                f"Authorisation Code: {authorisation_code}\n"
+            )
+        confirmation_message_plain += (
+            f"Total Bill: £{total_bill:.2f}\n\n"
             f"A confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile})."
         )
 
         confirmation_message_html = f"""
+        <!DOCTYPE html>
         <html>
-        <body style="font-family: Arial, sans-serif; color: #333; line-height:1.6;">
-            <p>Hello {first_name or ''} {name.get('last', '') if isinstance(name, dict) else ''},</p>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Appointment Confirmed</title>
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6;">
+            <div style="max-width: 600px; margin: 20px auto; padding: 20px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); border: 1px solid #e0e0e0;">
+                
+                <!-- Header -->
+                <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #f0f0f0;">
+                    <img src="https://placehold.co/150x50/2a7ae2/FFFFFF?text=Logo" alt="Nuffield Health Logo" style="max-width: 150px; height: auto;">
+                    <h1 style="font-size: 24px; color: #333; margin-top: 10px;">Appointment Confirmed</h1>
+                </div>
 
-            <p>
-            This email confirms your consultation appointment with 
-            <b>Nuffield Health</b>.
-            </p>
+                <!-- Body -->
+                <div style="padding-top: 20px;">
+                    <p style="font-size: 16px; color: #555; line-height: 1.6;">Dear {first_name},</p>
+                    <p style="font-size: 16px; color: #555; line-height: 1.6;">We're pleased to confirm your upcoming consultation. Please find the details below. We look forward to seeing you!</p>
+                    
+                    <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 8px 0; color: #888; width: 30%;"><strong>Patient:</strong></td>
+                                <td style="padding: 8px 0; color: #333;">{first_name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; color: #888;"><strong>Doctor:</strong></td>
+                                <td style="padding: 8px 0; color: #333;">{doctor_name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; color: #888;"><strong>Specialty:</strong></td>
+                                <td style="padding: 8px 0; color: #333;">{DOCTORS[doctor_name]['specialty']}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; color: #888;"><strong>Hospital:</strong></td>
+                                <td style="padding: 8px 0; color: #333;">{location_name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; color: #888;"><strong>Address:</strong></td>
+                                <td style="padding: 8px 0; color: #333;">{hospital_info.get('address', 'N/A')}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; color: #888;"><strong>Date & Time:</strong></td>
+                                <td style="padding: 8px 0; color: #333;">{formatted_date_time}</td>
+                            </tr>
+                            <tr style="border-top: 1px solid #e0e0e0;">
+                                <td style="padding: 8px 0; color: #888;"><strong>Payment Method:</strong></td>
+                                <td style="padding: 8px 0; color: #333;">{payment_method}</td>
+                            </tr>
+                            {'<tr style="border-top: 1px solid #e0e0e0;">' if payment_method == 'I have medical insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #888;"><strong>Insurer:</strong></td>' if payment_method == 'I have medical insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #333;">' + str(insurer) + '</td>' if payment_method == 'I have medical insurance' else ''}
+                            {'</tr>' if payment_method == 'I have medical insurance' else ''}
+                            {'<tr>' if payment_method == 'I have medical insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #888;"><strong>Policy Number:</strong></td>' if payment_method == 'I have medical insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #333;">' + str(policy_number) + '</td>' if payment_method == 'I have medical insurance' else ''}
+                            {'</tr>' if payment_method == 'I have medical insurance' else ''}
+                            {'<tr>' if payment_method == 'I have medical insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #888;"><strong>Authorisation Code:</strong></td>' if payment_method == 'I have medical insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #333;">' + str(authorisation_code) + '</td>' if payment_method == 'I have medical insurance' else ''}
+                            {'</tr>' if payment_method == 'I have medical insurance' else ''}
+                            <tr>
+                                <td style="padding: 8px 0; color: #888;"><strong>Total Bill:</strong></td>
+                                <td style="padding: 8px 0; color: #333;"><strong>£{total_bill:.2f}</strong></td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <p style="font-size: 16px; color: #555; line-height: 1.6;">
+                        A confirmation has also been sent to your <strong style="color: #2a7ae2;">✉️ email ({email})</strong> and <strong style="color: #2a7ae2;">📞 WhatsApp ({mobile})</strong>.
+                    </p>
+                    
+                    <!-- Call to Action Button -->
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="#" style="background-color: #2a7ae2; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 25px; font-weight: bold; display: inline-block;">View My Account</a>
+                    </div>
+                </div>
 
-            <h3 style="color:#2a7ae2;">Appointment Details:</h3>
-            <table style="border-collapse: collapse; width: 100%; margin: 15px 0;">
-            <tr>
-                <td><b>👨‍⚕️ Doctor:</b></td>
-                <td>{doctor_name} ({DOCTORS[doctor_name]['qualifications']}) – {DOCTORS[doctor_name]['specialty']}</td>
-            </tr>
-            <tr>
-                <td><b>🏥 Location:</b></td>
-                <td>{location_name} | 📍 {hospital_info.get('address', 'N/A')}, {hospital_info.get('postcode', 'N/A')} | ☎ {hospital_info.get('phone', 'N/A')}</td>
-            </tr>
-            <tr>
-                <td><b>🗓 Date:</b></td>
-                <td>{dt_obj.strftime("%A, %d %B %Y") if appointment_datetime else 'TBD'}</td>
-            </tr>
-            <tr>
-                <td><b>⏰ Time:</b></td>
-                <td>{dt_obj.strftime("%I:%M %p") if appointment_datetime else 'TBD'}</td>
-            </tr>
-            <tr>
-                <td><b>💷 Cost:</b></td>
-                <td>£{DOCTORS[doctor_name]['fees'].get('Initial consultation')}</td>
-            </tr>
-            </table>
+                <!-- Footer -->
+                <div style="text-align: center; padding-top: 20px; border-top: 1px solid #f0f0f0; margin-top: 30px;">
+                    <p style="font-size: 14px; color: #aaa; margin: 0;">
+                        If you have any questions, please do not hesitate to contact us.
+                    </p>
+                    <p style="font-size: 14px; color: #aaa; margin: 5px 0 0;">
+                        Warm regards,<br>The Nuffield Health Team
+                    </p>
+                </div>
 
-            <p>
-            We look forward to seeing you.  
-            A confirmation has also been sent to your 📞 WhatsApp ({mobile}).
-            </p>
-
-            <p style="margin-top:20px; color:#555;">
-            Best regards,<br>
-            Nuffield Health Team
-            </p>
+            </div>
         </body>
         </html>
         """
-
 
         # Send email & WhatsApp
         if email:

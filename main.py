@@ -488,11 +488,11 @@ def webhook():
                 )
 
         # Calculate the total bill based on the payment method
-        base_fee = 300
+        base_fee = DOCTORS[doctor_name]['fees'].get('Initial consultation', 0)
         total_bill = 0
-        if payment_method == "Pay for myself":
+        if payment_method == "self":
             total_bill = base_fee
-        elif payment_method == "I have medical insurance":
+        elif payment_method == "insurance":
             total_bill = base_fee * 0.50  # Example: 50% co-pay
 
         # Build the confirmation message

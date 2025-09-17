@@ -391,8 +391,13 @@ def webhook():
 
     # --- Tag: Confirm Booking ---
     elif tag == "confirm_booking":
-        name = params.get("person_name", {})
-        first_name = name.get("first") if isinstance(name, dict) else name
+        name = params.get("person_name")
+        if isinstance(name, dict):
+            first_name = name.get("first") or name.get("original") or "Patient"
+        elif isinstance(name, str):
+            first_name = name.split()[0]
+        else:
+            first_name = "Patient"
         mobile = params.get("phone_number")
         email = params.get("email")
         appointment_datetime = params.get("appointment_datetime")
@@ -445,25 +450,51 @@ def webhook():
 
         confirmation_message_html = f"""
         <html>
-            <body style="font-family: Arial, sans-serif; color: #333;">
-                <h2 style="color:#2a7ae2;">✅ Your Consultation is Confirmed</h2>
-                <p>Dear {first_name or 'Patient'},</p>
-                <p>We are pleased to confirm your consultation:</p>
-                <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
-                    
-                    <tr><td><b>👨‍⚕️ Doctor:</b></td><td>{doctor_name}</td></tr>
-                    <tr><td><b>🔬 Specialty:</b></td><td>{DOCTORS[doctor_name]['specialty']}</td></tr>
-                    <tr><td><b>🏥 Hospital:</b></td><td>{location_name}</td></tr>
-                    <tr><td><b>📍 Address:</b></td><td>{hospital_info.get('address', 'N/A')}</td></tr>
-                    <tr><td><b>📞 Hospital Phone:</b></td><td>{hospital_info.get('phone', 'N/A')}</td></tr>
-                    <tr><td><b>🗓 Date & Time:</b></td><td>{formatted_date_time}</td></tr>
-                </table>
-                <p>A confirmation has also been sent to your 📞 WhatsApp ({mobile})</b>.</p>
-                <p style="margin-top:20px;">If you have any questions, feel free to reply to this email.</p>
-                <p style="color:#555;">Warm regards,<br>Nuffield Health Team</p>
-            </body>
+        <body style="font-family: Arial, sans-serif; color: #333; line-height:1.6;">
+            <p>Hello {first_name or ''} {name.get('last', '') if isinstance(name, dict) else ''},</p>
+
+            <p>
+            This email confirms your consultation appointment with 
+            <b>Nuffield Health</b>.
+            </p>
+
+            <h3 style="color:#2a7ae2;">Appointment Details:</h3>
+            <table style="border-collapse: collapse; width: 100%; margin: 15px 0;">
+            <tr>
+                <td><b>👨‍⚕️ Doctor:</b></td>
+                <td>{doctor_name} ({DOCTORS[doctor_name]['qualifications']}) – {DOCTORS[doctor_name]['specialty']}</td>
+            </tr>
+            <tr>
+                <td><b>🏥 Location:</b></td>
+                <td>{location_name} | 📍 {hospital_info.get('address', 'N/A')}, {hospital_info.get('postcode', 'N/A')} | ☎ {hospital_info.get('phone', 'N/A')}</td>
+            </tr>
+            <tr>
+                <td><b>🗓 Date:</b></td>
+                <td>{dt_obj.strftime("%A, %d %B %Y") if appointment_datetime else 'TBD'}</td>
+            </tr>
+            <tr>
+                <td><b>⏰ Time:</b></td>
+                <td>{dt_obj.strftime("%I:%M %p") if appointment_datetime else 'TBD'}</td>
+            </tr>
+            <tr>
+                <td><b>💷 Cost:</b></td>
+                <td>£{DOCTORS[doctor_name]['fees'].get('Initial consultation')}</td>
+            </tr>
+            </table>
+
+            <p>
+            We look forward to seeing you.  
+            A confirmation has also been sent to your 📞 WhatsApp ({mobile}).
+            </p>
+
+            <p style="margin-top:20px; color:#555;">
+            Best regards,<br>
+            Nuffield Health Team
+            </p>
+        </body>
         </html>
         """
+
 
         # Send email & WhatsApp
         if email:

@@ -43,9 +43,9 @@ DOCTORS = {
         "fees": {"Initial consultation": 300},
         "available_dates": {
             "The Holly Hospital": [
-                {"date": "2025-09-19", "times": ["15:45"]},
-                {"date": "2025-09-22", "times": ["10:15", "10:45", "11:00"]},
-                {"date": "2025-09-23", "times": ["14:45", "15:15", "15:30"]},
+                {"date": "2025-09-29", "times": ["15:45"]},
+                {"date": "2025-09-30", "times": ["10:15", "10:45", "11:00"]},
+                {"date": "2025-10-01", "times": ["14:45", "15:15", "15:30"]},
             ]
         },
         "services": ['Breast Cancer Diagnosis', 'Cosmetic Breast Surgery', 'Hernia Repair']
@@ -59,12 +59,12 @@ DOCTORS = {
         "fees": {"Initial consultation": 300},
         "available_dates": {
             "Nuffield Health Brentwood Hospital": [
-                {"date": "2025-09-19", "times": ["16:30", "16:45"]},
-                {"date": "2025-09-25", "times": ["16:30", "16:45"]},
+                {"date": "2025-09-29", "times": ["16:30", "16:45"]},
+                {"date": "2025-09-30", "times": ["16:30", "16:45"]},
             ],
             "The Holly Hospital": [
-                {"date": "2025-09-22", "times": ["17:00", "18:30"]},
-                {"date": "2025-09-26", "times": ["17:00", "18:30"]},
+                {"date": "2025-09-29", "times": ["17:00", "18:30"]},
+                {"date": "2025-09-30", "times": ["17:00", "18:30"]},
             ]
         },
         "services": ['Breast Reconstruction', 'Breast Cancer Surgery', 'Oncoplastic Surgery']
@@ -78,8 +78,8 @@ DOCTORS = {
         "fees": {"Initial consultation": 350},
         "available_dates": {
             "Nuffield Health Brentwood Hospital": [
-                {"date": "2025-09-19", "times": ["10:00", "10:30", "11:00"]},
-                {"date": "2025-09-26", "times": ["10:00", "10:30", "11:00"]},
+                {"date": "2025-09-29", "times": ["10:00", "10:30", "11:00"]},
+                {"date": "2025-10-02", "times": ["10:00", "10:30", "11:00"]},
             ]
         },
         "services": ['Heart Health Consultation', 'Echocardiograms', 'Blood Pressure Monitoring']
@@ -93,8 +93,8 @@ DOCTORS = {
         "fees": {"Initial consultation": 320},
         "available_dates": {
             "The Holly Hospital": [
-                {"date": "2025-09-20", "times": ["14:00", "14:30"]},
-                {"date": "2025-09-27", "times": ["14:00", "14:30"]},
+                {"date": "2025-09-30", "times": ["14:00", "14:30"]},
+                {"date": "2025-10-03", "times": ["14:00", "14:30"]},
             ]
         },
         "services": ['Stroke Prevention', 'Headache Management', 'Epilepsy Treatment']
@@ -108,13 +108,13 @@ DOCTORS = {
         "fees": {"Initial consultation": 280},
         "available_dates": {
             "Nuffield Health Brentwood Hospital": [
-                {"date": "2025-09-19", "times": ["09:00", "09:30", "10:00"]},
-                {"date": "2025-09-24", "times": ["09:00", "09:30", "10:00"]},
+                {"date": "2025-09-29", "times": ["09:00", "09:30", "10:00"]},
+                {"date": "2025-09-30", "times": ["09:00", "09:30", "10:00"]},
                 {"date": "2025-10-01", "times": ["09:00", "09:30"]},
             ],
             "The Holly Hospital": [
-                {"date": "2025-09-22", "times": ["13:00", "13:30", "14:00"]},
-                {"date": "2025-09-23", "times": ["13:00", "13:30", "14:00"]},
+                {"date": "2025-10-02", "times": ["13:00", "13:30", "14:00"]},
+                {"date": "2025-10-03", "times": ["13:00", "13:30", "14:00"]},
             ]
         },
         "services": ['Acne Treatment', 'Mole Checks', 'Skin Cancer Screening']
@@ -128,8 +128,8 @@ DOCTORS = {
         "fees": {"Initial consultation": 400},
         "available_dates": {
             "The Holly Hospital": [
-                {"date": "2025-09-19", "times": ["11:00", "11:30", "12:00"]},
-                {"date": "2025-09-25", "times": ["11:00", "11:30", "12:00"]},
+                {"date": "2025-09-29", "times": ["11:00", "11:30", "12:00"]},
+                {"date": "2025-09-30", "times": ["11:00", "11:30", "12:00"]},
                 {"date": "2025-10-02", "times": ["11:00", "11:30"]},
             ]
         },
@@ -144,12 +144,12 @@ DOCTORS = {
         "fees": {"Initial consultation": 250},
         "available_dates": {
             "The Holly Hospital": [
-                {"date": "2025-09-19", "times": ["09:00", "09:30"]},
-                {"date": "2025-09-24", "times": ["10:00", "10:30"]},
+                {"date": "2025-09-29", "times": ["09:00", "09:30"]},
+                {"date": "2025-09-30", "times": ["10:00", "10:30"]},
             ],
             "Nuffield Health Brentwood Hospital": [
-                {"date": "2025-09-19", "times": ["14:00", "14:30"]},
-                {"date": "2025-09-26", "times": ["15:00", "15:30"]},
+                {"date": "2025-09-29", "times": ["14:00", "14:30"]},
+                {"date": "2025-09-30", "times": ["15:00", "15:30"]},
             ]
         },
         "services": ['General Health Check-up', 'Preventative Medicine', 'Chronic Disease Management']

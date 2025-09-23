@@ -287,8 +287,8 @@ def webhook():
             for i, doctor in enumerate(available_doctors, 1):
                 text_line = (
                     f"\n{i}. {doctor['name']}\n"
-                    f"     Specialty: {doctor['specialty']}\n"
-                    f"     Locations: {', '.join(doctor['locations'])}"
+                    f"      Specialty: {doctor['specialty']}\n"
+                    f"      Locations: {', '.join(doctor['locations'])}"
                 )
                 doctor_text_lines.append(text_line)
 
@@ -317,7 +317,17 @@ def webhook():
 
     # --- Tag: Get Doctor Details (Updated to include times as chips and full hospital details) ---
     elif tag == "get_doctor_details":
+        # First, try to get the doctor_name from the parameters as intended
         doctor_name = params.get("doctor_name")
+        
+        # If the parameter is not set, try to extract it from the user's text input
+        # This is a common pattern when a chip's 'value' is used directly as user text
+        if not doctor_name:
+            query_text = req.get("text", "") or req.get("query_result", {}).get("query_text", "")
+            if query_text.lower().startswith("view "):
+                doctor_name = query_text[5:]
+                logging.info(f"Extracted doctor name from query text: {doctor_name}")
+
         doctor_details = DOCTORS.get(doctor_name)
 
         if doctor_details:
@@ -327,8 +337,8 @@ def webhook():
                 hospital_info = HOSPITALS.get(loc_name, {})
                 location_text = (
                     f"🏥 {loc_name}\n"
-                    f"     📍 Address: {hospital_info.get('address', 'N/A')}, {hospital_info.get('postcode', 'N/A')}\n"
-                    f"     📞 Phone: {hospital_info.get('phone', 'N/A')}"
+                    f"      📍 Address: {hospital_info.get('address', 'N/A')}, {hospital_info.get('postcode', 'N/A')}\n"
+                    f"      📞 Phone: {hospital_info.get('phone', 'N/A')}"
                 )
                 locations_and_details_text.append(location_text)
             
@@ -344,7 +354,7 @@ def webhook():
                     date_obj = datetime.strptime(slot["date"], "%Y-%m-%d")
                     date_str = date_obj.strftime("%a, %d %b")
                     times = ", ".join(slot["times"]) if slot["times"] else "No appointments"
-                    schedule_text.append(f"     📅 {date_str}: {times}")
+                    schedule_text.append(f"      📅 {date_str}: {times}")
 
                     for t in slot["times"]:
                         chips_options.append({
@@ -367,7 +377,7 @@ def webhook():
             chips_payload = {
                 "richContent": [
                     [
-                        {"type": "chips", "options": chips_options[:8]}, 
+                        {"type": "chips", "options": chips_options[:8]},  # Limit to 8 chips to prevent overflow
                         {"type": "chips", "options": [
                             {"text": "Go Back", "value": "Go back to doctor list"}
                         ]}
@@ -541,10 +551,7 @@ def webhook():
                     
                     <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
                         <table style="width: 100%; border-collapse: collapse;">
-                            <tr>
-                                <td style="padding: 8px 0; color: #888; width: 30%;"><strong>Patient:</strong></td>
-                                <td style="padding: 8px 0; color: #333;">{first_name}</td>
-                            </tr>
+                           
                             <tr>
                                 <td style="padding: 8px 0; color: #888;"><strong>Doctor:</strong></td>
                                 <td style="padding: 8px 0; color: #333;">{doctor_name}</td>

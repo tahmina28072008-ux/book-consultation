@@ -8,6 +8,7 @@ from firebase_admin import credentials, firestore
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import difflib
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 app = Flask(__name__)
@@ -223,6 +224,21 @@ def send_email(to_email, subject, plain_body, html_body):
         server.quit()
     return True
 
+def find_doctor_key(user_input):
+    # Try perfect match first (case/whitespace insensitive)
+    for key in DOCTORS.keys():
+        if key.strip().lower() == user_input.strip().lower():
+            return key
+    # Try fuzzy match (partial, ignoring Dr/Mr/Ms prefixes)
+    options = [k.lower() for k in DOCTORS.keys()]
+    input_clean = user_input.lower().replace('dr. ', '').replace('mr ', '').replace('ms ', '').replace('miss ', '').strip()
+    match = difflib.get_close_matches(input_clean, options, n=1, cutoff=0.7)
+    if match:
+        for key in DOCTORS.keys():
+            if key.lower() == match[0]:
+                return key
+    return None
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
@@ -287,20 +303,15 @@ def webhook():
     # --- Doctor Details ---
     elif tag == "get_doctor_details":
         doctor_name = params.get("doctor_name")
-        # Fallback to user text/chip value if not set
         if not doctor_name:
             doctor_name = req.get("text", "") or req.get("query_result", {}).get("query_text", "")
             if doctor_name.lower().startswith("view "):
                 doctor_name = doctor_name[5:]
             doctor_name = doctor_name.strip()
-        # Robust matching: ignore case, strip whitespace
-        match = None
-        for key in DOCTORS.keys():
-            if key.strip().lower() == doctor_name.strip().lower():
-                match = key
-                break
+        logging.info(f"Doctor name received: '{doctor_name}'")
+        match = find_doctor_key(doctor_name)
         if not match:
-            logging.error(f"Doctor not found with key: '{doctor_name}'")
+            logging.error(f"Doctor not found for input: '{doctor_name}'")
             return jsonify({
                 "fulfillment_response": {
                     "messages": [{"text": {"text": ["Sorry, I couldn't find details for that doctor."]}}]
@@ -402,16 +413,15 @@ def webhook():
 
     # --- Final Confirmation and Billing ---
     elif tag == "final_confirm_and_send":
-        # Robustly extract payment_method
-        payment_method = params.get("payment_method")
-        if not payment_method:
-            payment_method = req.get("text", "")
-            payment_method = payment_method.strip().lower()
-            # Normalize variants
-            if payment_method in ["pay for myself", "pay myself", "self"]:
-                payment_method = "self"
-            elif payment_method in ["i have medical insurance", "insurance"]:
-                payment_method = "insurance"
+        payment_method_raw = params.get("payment_method") or req.get("text", "")
+        payment_method = payment_method_raw.strip().lower()
+        if payment_method in ["pay for myself", "pay myself", "self"]:
+            payment_method = "self"
+        elif payment_method in ["i have medical insurance", "insurance"]:
+            payment_method = "insurance"
+        else:
+            logging.warning(f"Unknown payment method: {payment_method_raw}")
+
         name = params.get("person_name", {})
         first_name = name.get("name") if isinstance(name, dict) else name
         mobile = params.get("phone_number")
@@ -421,18 +431,15 @@ def webhook():
         insurer = params.get("insurer")
         policy_number = params.get("policy_number")
         authorisation_code = params.get("authorisation_code")
-        # Robust doctor name matching
-        match = None
-        for key in DOCTORS.keys():
-            if key.strip().lower() == (doctor_name or "").strip().lower():
-                match = key
-                break
+
+        match = find_doctor_key(doctor_name or "")
         if not match:
             return jsonify({
                 "fulfillment_response": {
                     "messages": [{"text": {"text": ["Doctor not found."]}}]
                 }
             })
+
         location_name = DOCTORS[match]["locations"][0]
         hospital_info = HOSPITALS.get(location_name, {})
         formatted_date_time = "your selected date and time"

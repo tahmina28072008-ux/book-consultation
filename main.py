@@ -14,7 +14,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 app = Flask(__name__)
 
-
 # --- Firestore Setup ---
 db = None
 try:
@@ -170,39 +169,27 @@ HOSPITALS = {
     }
 }
 
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID") # Replace with your Account SID
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN") # Replace with your Auth Token
-TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER") # Replace with your Twilio phone number
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER")
 
 def format_phone_number(phone_number):
-    """
-    Formats a phone number to E.164 format.
-    Handles common UK number formats (e.g., '07...' or '447...').
-    """
     phone_number = phone_number.replace(' ', '').replace('-', '')
     if not phone_number.startswith('+'):
         if phone_number.startswith('0'):
-            # This is the fix for your specific error.
-            # It handles numbers starting with '0' by removing the '0' and adding '+44'
             return f'+44{phone_number[1:]}'
         elif phone_number.startswith('44'):
-            # Assumes UK number and adds the '+'
             return f'+{phone_number}'
         else:
-            # Fallback for other formats, might need to be more specific
             logging.warning(f"Could not reliably format phone number: {phone_number}")
             return f'+{phone_number}'
     return phone_number
 
 def send_whatsapp_message(to_number, body):
-    """Sends a WhatsApp message using the Twilio API."""
     try:
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         formatted_to_number = format_phone_number(to_number)
-
-        # Log the numbers to confirm correct formatting before sending
         logging.info(f"Attempting to send message from {TWILIO_PHONE_NUMBER} to {formatted_to_number}")
-
         message = client.messages.create(
             from_=f'whatsapp:{TWILIO_PHONE_NUMBER}',
             body=body,
@@ -210,13 +197,9 @@ def send_whatsapp_message(to_number, body):
         )
         logging.info(f"WhatsApp message sent to {formatted_to_number}: {message.sid}")
         return message.sid
-
     except Exception as e:
-        # A more specific error log with the phone number that failed
         logging.error(f"Failed to send WhatsApp message to {to_number}: {e}")
         return None
-
-
 
 def send_email(to_email, subject, plain_body, html_body):
     sender_email = os.environ.get("SENDER_EMAIL")
@@ -224,14 +207,12 @@ def send_email(to_email, subject, plain_body, html_body):
     if not sender_email or not sender_password:
         logging.error("Email credentials not found.")
         return False
-
     msg = MIMEMultipart('alternative')
     msg['From'] = sender_email
     msg['To'] = to_email
     msg['Subject'] = subject
     msg.attach(MIMEText(plain_body, 'plain'))
     msg.attach(MIMEText(html_body, 'html'))
-
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
@@ -244,26 +225,21 @@ def send_email(to_email, subject, plain_body, html_body):
         server.quit()
     return True
 
-# --- Webhook endpoint (for Dialogflow/etc) ---
 @app.route('/webhook', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
     tag = req.get("fulfillmentInfo", {}).get("tag")
     params = req.get("sessionInfo", {}).get("parameters", {})
-
     logging.info(f"Webhook called. Tag: {tag}, Params: {params}")
 
-    # --- Tag: Get Doctor List ---
     if tag == "get_doctor_list":
         city = params.get("city")
         postcode = params.get("postcode")
         specialty = params.get("specialty")
-
         available_doctors = []
         for doctor_name, details in DOCTORS.items():
             if specialty and specialty.lower() not in details["specialty"].lower():
                 continue
-
             matching_locations = []
             for loc in details["locations"]:
                 hospital = HOSPITALS.get(loc, {})
@@ -272,18 +248,15 @@ def webhook():
                 if postcode and postcode.lower() != hospital.get("postcode", "").lower():
                     continue
                 matching_locations.append(loc)
-
             if matching_locations:
                 doctor_details = details.copy()
                 doctor_details["name"] = doctor_name
                 doctor_details["locations"] = matching_locations
                 doctor_details["available_dates"] = {loc: dates for loc, dates in details.get("available_dates", {}).items() if loc in matching_locations}
                 available_doctors.append(doctor_details)
-
         if available_doctors:
             doctor_text_lines = ["Here are some of our doctors who match your search. Which one would you like to know more about?"]
             chips_options = []
-            
             for i, doctor in enumerate(available_doctors, 1):
                 text_line = (
                     f"\n{i}. {doctor['name']}\n"
@@ -291,15 +264,12 @@ def webhook():
                     f"      Locations: {', '.join(doctor['locations'])}"
                 )
                 doctor_text_lines.append(text_line)
-
                 chips_options.append({
                     "text": f"View {doctor['name']}",
-                    "value": f"View {doctor['name']}"
+                    "value": doctor['name']
                 })
-
             card_text_message = {"text": {"text": doctor_text_lines}}
             chips_payload = {"richContent": [[{"type": "chips", "options": chips_options}]]}
-            
             return jsonify({
                 "fulfillment_response": {
                     "messages": [card_text_message, {"payload": chips_payload}]
@@ -315,23 +285,18 @@ def webhook():
                 }
             })
 
-    # --- Tag: Get Doctor Details (Updated to include times as chips and full hospital details) ---
     elif tag == "get_doctor_details":
-        # First, try to get the doctor_name from the parameters as intended
         doctor_name = params.get("doctor_name")
-        
-        # If the parameter is not set, try to extract it from the user's text input
-        # This is a common pattern when a chip's 'value' is used directly as user text
         if not doctor_name:
-            query_text = req.get("text", "") or req.get("query_result", {}).get("query_text", "")
+            query_text = req.get("text", "") or req.get("query_result", {}).get("query_text", "") or ""
             if query_text.lower().startswith("view "):
                 doctor_name = query_text[5:]
-                logging.info(f"Extracted doctor name from query text: {doctor_name}")
-
+            else:
+                doctor_name = query_text
+            doctor_name = doctor_name.strip()
+            logging.info(f"Extracted doctor name from query text: {doctor_name}")
         doctor_details = DOCTORS.get(doctor_name)
-
         if doctor_details:
-            # Build the rich card response with more details
             locations_and_details_text = []
             for loc_name in doctor_details.get("locations", []):
                 hospital_info = HOSPITALS.get(loc_name, {})
@@ -341,13 +306,9 @@ def webhook():
                     f"      📞 Phone: {hospital_info.get('phone', 'N/A')}"
                 )
                 locations_and_details_text.append(location_text)
-            
             services_text = ", ".join(doctor_details.get("services", []))
-
-            # Build schedule text and chips
             schedule_text = []
             chips_options = []
-
             for loc, slots in doctor_details.get("available_dates", {}).items():
                 schedule_text.append(f"🏥 {loc}")
                 for slot in slots:
@@ -355,13 +316,11 @@ def webhook():
                     date_str = date_obj.strftime("%a, %d %b")
                     times = ", ".join(slot["times"]) if slot["times"] else "No appointments"
                     schedule_text.append(f"      📅 {date_str}: {times}")
-
                     for t in slot["times"]:
                         chips_options.append({
                             "text": f"{date_str} {t}",
                             "value": f"Book appointment with {doctor_name} on {date_obj.date()} at {t}"
                         })
-
             detail_text = (
                 f"Here are the details for {doctor_name}:\n\n"
                 f"🩺 Specialty: {doctor_details.get('specialty')}\n"
@@ -372,19 +331,16 @@ def webhook():
                 f"Services: {services_text}\n"
                 f"📅 Available Dates & Times:\n" + "\n".join(schedule_text)
             )
-
-            # The full rich response payload with chips
             chips_payload = {
                 "richContent": [
                     [
-                        {"type": "chips", "options": chips_options[:8]},  # Limit to 8 chips to prevent overflow
+                        {"type": "chips", "options": chips_options[:8]},
                         {"type": "chips", "options": [
                             {"text": "Go Back", "value": "Go back to doctor list"}
                         ]}
                     ]
                 ]
             }
-
             return jsonify({
                 "fulfillment_response": {
                     "messages": [
@@ -400,7 +356,6 @@ def webhook():
                 }
             })
 
-    # --- Tag: Ask for Payment Method ---
     elif tag == "confirm_booking":
         response_text = "Thank you. How would you like to pay for the consultation?"
         chips_payload = {
@@ -437,7 +392,6 @@ def webhook():
             }
         })
     
-    # --- New Tag: Ask for Insurance Details ---
     elif tag == "ask_for_insurance_details":
         response_text = "Please provide your Insurer, Policy number, and Authorisation code."
         return jsonify({
@@ -448,7 +402,6 @@ def webhook():
             }
         })
 
-    # --- New Tag: Final Confirmation and Billing ---
     elif tag == "final_confirm_and_send":
         name = params.get("person_name", {})
         first_name = name.get("name") if isinstance(name, dict) else name
@@ -457,55 +410,50 @@ def webhook():
         appointment_datetime = params.get("appointment_datetime")
         doctor_name = params.get("doctor_name")
         payment_method = params.get("payment_method")
-        
-        # New parameters for insurance
         insurer = params.get("insurer")
         policy_number = params.get("policy_number")
         authorisation_code = params.get("authorisation_code")
-
         if not doctor_name or doctor_name not in DOCTORS:
             return jsonify({
                 "fulfillment_response": {
                     "messages": [{"text": {"text": ["Doctor not found."]}}]
                 }
             })
-
         location_name = DOCTORS[doctor_name]["locations"][0]
         hospital_info = HOSPITALS.get(location_name, {})
-
         formatted_date_time = "your selected date and time"
         if appointment_datetime:
             try:
                 if isinstance(appointment_datetime, dict):
-                    # Extract values and cast to int
                     year = int(appointment_datetime.get("year", 0))
                     month = int(appointment_datetime.get("month", 1))
                     day = int(appointment_datetime.get("day", 1))
                     hours = int(appointment_datetime.get("hours", 0))
                     minutes = int(appointment_datetime.get("minutes", 0))
                     seconds = int(appointment_datetime.get("seconds", 0))
-                    
                     dt_obj = datetime(year, month, day, hours, minutes, seconds)
                 else:
-                    # Handle ISO 8601 string
                     dt_obj = datetime.fromisoformat(appointment_datetime)
-
                 formatted_date_time = dt_obj.strftime("%A, %d %B %Y at %I:%M %p")
-
             except Exception as e:
                 logging.warning(
                     f"Failed to parse appointment_datetime: {appointment_datetime}, error: {e}"
                 )
 
-        # Calculate the total bill based on the payment method
         base_fee = DOCTORS[doctor_name]['fees'].get('Initial consultation', 0)
-        total_bill = 0
         if payment_method == "self":
             total_bill = base_fee
+            payment_method_display = "Pay for myself"
+            payment_instructions = "Please proceed to payment. You can pay by card on arrival or use our online payment portal: [Pay Now](https://your-payment-link.example.com)"
         elif payment_method == "insurance":
-            total_bill = base_fee * 0.50  # Example: 50% co-pay
+            total_bill = base_fee * 0.50
+            payment_method_display = "I have medical insurance"
+            payment_instructions = ""
+        else:
+            total_bill = base_fee
+            payment_method_display = payment_method
+            payment_instructions = ""
 
-        # Build the confirmation message
         confirmation_message_plain = (
             f"Booking Confirmed!\n\n"
             f"Doctor: {doctor_name}\n"
@@ -514,21 +462,46 @@ def webhook():
             f"Address: {hospital_info.get('address', 'N/A')}\n"
             f"Phone: {hospital_info.get('phone', 'N/A')}\n"
             f"Date & Time: {formatted_date_time}\n"
-            f"Payment Method: {payment_method}\n"
+            f"Payment Method: {payment_method_display}\n"
         )
-        if payment_method == "I have medical insurance":
+        if payment_method == "insurance":
             confirmation_message_plain += (
                 f"Insurer: {insurer}\n"
                 f"Policy Number: {policy_number}\n"
                 f"Authorisation Code: {authorisation_code}\n"
             )
         confirmation_message_plain += (
-            f"Total Bill: £{total_bill:.2f}\n\n"
-            f"A confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile})."
+            f"Total Bill: £{total_bill:.2f}\n"
+        )
+        if payment_instructions:
+            confirmation_message_plain += f"{payment_instructions}\n"
+        confirmation_message_plain += (
+            f"\nA confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile})."
         )
 
-        confirmation_message_html = f"""
-        <!DOCTYPE html>
+        whatsapp_message = (
+            f"Booking Confirmed!\n\n"
+            f"Doctor: {doctor_name}\n"
+            f"Specialty: {DOCTORS[doctor_name]['specialty']}\n"
+            f"Location: {location_name}\n"
+            f"Address: {hospital_info.get('address', 'N/A')}\n"
+            f"Phone: {hospital_info.get('phone', 'N/A')}\n"
+            f"Date & Time: {formatted_date_time}\n"
+            f"Payment Method: {payment_method_display}\n"
+        )
+        if payment_method == "insurance":
+            whatsapp_message += (
+                f"Insurer: {insurer}\n"
+                f"Policy Number: {policy_number}\n"
+                f"Authorisation Code: {authorisation_code}\n"
+            )
+        whatsapp_message += (
+            f"Total Bill: £{total_bill:.2f}\n"
+        )
+        if payment_instructions:
+            whatsapp_message += f"{payment_instructions}\n"
+
+        confirmation_message_html = f"""<!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
@@ -537,21 +510,15 @@ def webhook():
         </head>
         <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6;">
             <div style="max-width: 600px; margin: 20px auto; padding: 20px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); border: 1px solid #e0e0e0;">
-                
-                <!-- Header -->
                 <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #f0f0f0;">
                     <img src="https://placehold.co/150x50/2a7ae2/FFFFFF?text=Logo" alt="Nuffield Health Logo" style="max-width: 150px; height: auto;">
                     <h1 style="font-size: 24px; color: #333; margin-top: 10px;">Appointment Confirmed</h1>
                 </div>
-
-                <!-- Body -->
                 <div style="padding-top: 20px;">
                     <p style="font-size: 16px; color: #555; line-height: 1.6;">Dear {first_name},</p>
                     <p style="font-size: 16px; color: #555; line-height: 1.6;">We're pleased to confirm your upcoming consultation. Please find the details below. We look forward to seeing you!</p>
-                    
                     <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
                         <table style="width: 100%; border-collapse: collapse;">
-                           
                             <tr>
                                 <td style="padding: 8px 0; color: #888;"><strong>Doctor:</strong></td>
                                 <td style="padding: 8px 0; color: #333;">{doctor_name}</td>
@@ -574,38 +541,33 @@ def webhook():
                             </tr>
                             <tr style="border-top: 1px solid #e0e0e0;">
                                 <td style="padding: 8px 0; color: #888;"><strong>Payment Method:</strong></td>
-                                <td style="padding: 8px 0; color: #333;">{payment_method}</td>
+                                <td style="padding: 8px 0; color: #333;">{payment_method_display}</td>
                             </tr>
-                            {'<tr style="border-top: 1px solid #e0e0e0;">' if payment_method == 'I have medical insurance' else ''}
-                            {'<td style="padding: 8px 0; color: #888;"><strong>Insurer:</strong></td>' if payment_method == 'I have medical insurance' else ''}
-                            {'<td style="padding: 8px 0; color: #333;">' + str(insurer) + '</td>' if payment_method == 'I have medical insurance' else ''}
-                            {'</tr>' if payment_method == 'I have medical insurance' else ''}
-                            {'<tr>' if payment_method == 'I have medical insurance' else ''}
-                            {'<td style="padding: 8px 0; color: #888;"><strong>Policy Number:</strong></td>' if payment_method == 'I have medical insurance' else ''}
-                            {'<td style="padding: 8px 0; color: #333;">' + str(policy_number) + '</td>' if payment_method == 'I have medical insurance' else ''}
-                            {'</tr>' if payment_method == 'I have medical insurance' else ''}
-                            {'<tr>' if payment_method == 'I have medical insurance' else ''}
-                            {'<td style="padding: 8px 0; color: #888;"><strong>Authorisation Code:</strong></td>' if payment_method == 'I have medical insurance' else ''}
-                            {'<td style="padding: 8px 0; color: #333;">' + str(authorisation_code) + '</td>' if payment_method == 'I have medical insurance' else ''}
-                            {'</tr>' if payment_method == 'I have medical insurance' else ''}
+                            {'<tr style="border-top: 1px solid #e0e0e0;">' if payment_method == 'insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #888;"><strong>Insurer:</strong></td>' if payment_method == 'insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #333;">' + str(insurer) + '</td>' if payment_method == 'insurance' else ''}
+                            {'</tr>' if payment_method == 'insurance' else ''}
+                            {'<tr>' if payment_method == 'insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #888;"><strong>Policy Number:</strong></td>' if payment_method == 'insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #333;">' + str(policy_number) + '</td>' if payment_method == 'insurance' else ''}
+                            {'</tr>' if payment_method == 'insurance' else ''}
+                            {'<tr>' if payment_method == 'insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #888;"><strong>Authorisation Code:</strong></td>' if payment_method == 'insurance' else ''}
+                            {'<td style="padding: 8px 0; color: #333;">' + str(authorisation_code) + '</td>' if payment_method == 'insurance' else ''}
+                            {'</tr>' if payment_method == 'insurance' else ''}
                             <tr>
                                 <td style="padding: 8px 0; color: #888;"><strong>Total Bill:</strong></td>
                                 <td style="padding: 8px 0; color: #333;"><strong>£{total_bill:.2f}</strong></td>
                             </tr>
                         </table>
                     </div>
-                    
                     <p style="font-size: 16px; color: #555; line-height: 1.6;">
                         A confirmation has also been sent to your <strong style="color: #2a7ae2;">📞 WhatsApp ({mobile})</strong>.
                     </p>
-                    
-                    <!-- Call to Action Button -->
                     <div style="text-align: center; margin-top: 30px;">
                         <a href="#" style="background-color: #2a7ae2; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 25px; font-weight: bold; display: inline-block;">View My Account</a>
                     </div>
                 </div>
-
-                <!-- Footer -->
                 <div style="text-align: center; padding-top: 20px; border-top: 1px solid #f0f0f0; margin-top: 30px;">
                     <p style="font-size: 14px; color: #aaa; margin: 0;">
                         If you have any questions, please do not hesitate to contact us.
@@ -614,17 +576,15 @@ def webhook():
                         Warm regards,<br>The Nuffield Health Team
                     </p>
                 </div>
-
             </div>
         </body>
         </html>
         """
 
-        # Send email & WhatsApp
         if email:
             send_email(email, "✅ Consultation Confirmed", confirmation_message_plain, confirmation_message_html)
         if mobile:
-            send_whatsapp_message(mobile, confirmation_message_plain)
+            send_whatsapp_message(mobile, whatsapp_message)
 
         return jsonify({
             "fulfillment_response": {
@@ -634,7 +594,6 @@ def webhook():
             }
         })
     else:
-        # --- Default Handler ---
         return jsonify({
             "fulfillment_response": {
                 "messages": [

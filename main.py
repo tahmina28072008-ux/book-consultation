@@ -354,6 +354,41 @@ def webhook():
             }
         })
 
+    # --- Ask if user wants to upload medical document ---
+    elif tag == "ask_upload_document":
+        prompt = "Would you like to upload a medical test document before confirming your booking?"
+        chips_payload = {
+            "richContent": [
+                [
+                    {"type": "chips", "options": [
+                        {"text": "Yes, upload document", "value": "yes"},
+                        {"text": "No, confirm booking", "value": "no"}
+                    ]}
+                ]
+            ]
+        }
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [prompt]}},
+                    {"payload": chips_payload}
+                ]
+            }
+        })
+
+    # --- Handle document upload flow ---
+    elif tag == "handle_upload_document":
+        # You would implement your upload logic here or just acknowledge for mock/demo
+        response_text = "Thank you. Your document has been received. Now confirming your booking..."
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [response_text]}}
+                ]
+            }
+        })
+        # After this, Dialogflow transitions to final_confirm_and_send
+
     # --- Final Confirmation and Billing ---
     elif tag == "final_confirm_and_send":
         name = params.get("person_name", {})

@@ -408,13 +408,13 @@ def handle_confirmation(params):
         }
     })
 
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    req = request.get_json(silent=True, force=True)
-    tag = req.get("fulfillmentInfo", {}).get("tag")
-    params = req.get("sessionInfo", {}).get("parameters", {})
-    logging.info(f"Webhook called. Tag: {tag}, Params: {params}, Raw Body: {req}")
-    logging.info(f"Webhook called. Tag: {tag}, Params: {params}, upload_choice: {params.get('upload_choice')}")
+    body = request.get_json(silent=True, force=True)
+    tag = body.get("fulfillmentInfo", {}).get("tag")
+    params = body.get("sessionInfo", {}).get("parameters", {})
+    logging.info(f"Webhook called. Tag: {tag}, Params: {params}, upload_choice: {params.get('upload_choice')}, Raw Body: {body}")
 
     # --- Doctor List ---
     if tag == "get_doctor_list":
@@ -478,7 +478,7 @@ def webhook():
     elif tag == "get_doctor_details":
         doctor_name = params.get("doctor_name")
         if not doctor_name:
-            doctor_name = req.get("text", "") or req.get("query_result", {}).get("query_text", "")
+            doctor_name = body.get("text", "") or body.get("query_result", {}).get("query_text", "")
             if doctor_name.lower().startswith("view "):
                 doctor_name = doctor_name[5:]
             doctor_name = doctor_name.strip()
@@ -556,10 +556,7 @@ def webhook():
                         "options": [
                             {"text": "Yes, upload document", "value": "yes"},
                             {"text": "No, confirm booking", "value": "no"}
-                        ],
-                        "input": {
-                            "parameter": "upload_choice"
-                        }
+                        ]
                     }
                 ]
             ]
@@ -587,10 +584,32 @@ def webhook():
     # --- Final Confirmation and Billing ---
     elif tag == "final_confirm_and_send":
         upload_choice = params.get("upload_choice")
+
+        # Fallback: check raw text if upload_choice is missing
+        user_text = body.get("text", "").lower() if body.get("text") else ""
+        if not upload_choice and "no" in user_text:
+            upload_choice = "no"
+        elif not upload_choice and "yes" in user_text:
+            upload_choice = "yes"
+
         if upload_choice == "no":
             return handle_confirmation(params)
-        # If you want to handle the "yes" case, put your logic here or route accordingly
-        return handle_confirmation(params)
+        elif upload_choice == "yes":
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [
+                        {"text": {"text": ["Great! Please upload your document."]}}
+                    ]
+                }
+            })
+
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": ["I didn’t catch that. Would you like to upload a document? Yes or No?"]}}
+                ]
+            }
+        })
 
     else:
         return jsonify({

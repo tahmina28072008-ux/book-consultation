@@ -218,198 +218,6 @@ def find_doctor_key(user_input):
                 return key
     return None
 
-def webhook_final_confirm(params):
-    name = params.get("person_name", {})
-    first_name = name.get("name") if isinstance(name, dict) else name
-    mobile = params.get("phone_number")
-    email = params.get("email")
-    appointment_datetime = params.get("appointment_datetime")
-    doctor_name = params.get("doctor_name")
-    insurer = params.get("insurance_provider")
-    policy_number = params.get("policy_number")
-    authorisation_code = params.get("authorisation_code")
-
-    match = find_doctor_key(doctor_name or "")
-    if not match:
-        return jsonify({
-            "fulfillment_response": {
-                "messages": [{"text": {"text": ["Doctor not found."]}}]
-            }
-        })
-
-    location_name = DOCTORS[match]["locations"][0]
-    hospital_info = HOSPITALS.get(location_name, {})
-    formatted_date_time = "your selected date and time"
-    if appointment_datetime:
-        try:
-            if isinstance(appointment_datetime, dict):
-                year = int(appointment_datetime.get("year", 0))
-                month = int(appointment_datetime.get("month", 1))
-                day = int(appointment_datetime.get("day", 1))
-                hours = int(appointment_datetime.get("hours", 0))
-                minutes = int(appointment_datetime.get("minutes", 0))
-                seconds = int(appointment_datetime.get("seconds", 0))
-                dt_obj = datetime(year, month, day, hours, minutes, seconds)
-            else:
-                dt_obj = datetime.fromisoformat(appointment_datetime)
-            formatted_date_time = dt_obj.strftime("%A, %d %B %Y at %I:%M %p")
-        except Exception as e:
-            logging.warning(f"Failed to parse appointment_datetime: {appointment_datetime}, error: {e}")
-
-    base_fee = DOCTORS[match]['fees'].get('Initial consultation', 0)
-    insurance_discount = 1.0
-    if insurer and isinstance(insurer, str) and insurer.strip().lower() == "axa health":
-        insurance_discount = 0.5
-    total_bill = base_fee * insurance_discount
-
-    confirmation_message_plain = (
-        f"Booking Confirmed!\n\n"
-        f"Doctor: {match}\n"
-        f"Specialty: {DOCTORS[match]['specialty']}\n"
-        f"Location: {location_name}\n"
-        f"Address: {hospital_info.get('address', 'N/A')}\n"
-        f"Phone: {hospital_info.get('phone', 'N/A')}\n"
-        f"Date & Time: {formatted_date_time}\n"
-    )
-    if insurer:
-        confirmation_message_plain += (
-            f"Insurer: {insurer}\n"
-            f"Policy Number: {policy_number}\n"
-            f"Authorisation Code: {authorisation_code}\n"
-        )
-    confirmation_message_plain += (
-        f"Total Bill: £{total_bill:.2f}\n"
-        f"\nA confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile})."
-    )
-
-    whatsapp_message = confirmation_message_plain
-
-    # --- BEGIN: HTML Template for Confirmation Email ---
-    confirmation_message_html = f"""
-    <html>
-    <head>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                color: #222;
-                background-color: #f7f7f7;
-                margin: 0;
-                padding: 0;
-            }}
-            .container {{
-                background: #fff;
-                margin: 30px auto;
-                padding: 24px;
-                border-radius: 10px;
-                max-width: 600px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            }}
-            .header {{
-                background-color: #1d7cab;
-                color: #fff;
-                padding: 16px;
-                border-radius: 10px 10px 0 0;
-                text-align: center;
-            }}
-            .section-title {{
-                margin-top: 24px;
-                font-size: 18px;
-                color: #1d7cab;
-                border-bottom: 1px solid #eee;
-            }}
-            .info-list {{
-                list-style: none;
-                padding: 0;
-                margin: 0;
-            }}
-            .info-list li {{
-                margin-bottom: 10px;
-                font-size: 16px;
-            }}
-            .footer {{
-                margin-top: 32px;
-                font-size: 15px;
-                color: #666;
-                text-align: center;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h2>✅ Your Consultation is Confirmed!</h2>
-            </div>
-            <p>Dear {first_name},</p>
-            <p>
-                Thank you for booking your consultation. Here are your appointment details:
-            </p>
-            <div class="section-title">Doctor Details</div>
-            <ul class="info-list">
-                <li><strong>Name:</strong> {match}</li>
-                <li><strong>Specialty:</strong> {DOCTORS[match]['specialty']}</li>
-                <li><strong>Qualifications:</strong> {DOCTORS[match]['qualifications']}</li>
-                <li><strong>GMC Number:</strong> {DOCTORS[match]['gmcNumber']}</li>
-                <li><strong>Practising Since:</strong> {DOCTORS[match]['practisingSince']}</li>
-            </ul>
-            <div class="section-title">Hospital Details</div>
-            <ul class="info-list">
-                <li><strong>Hospital:</strong> {location_name}</li>
-                <li><strong>Address:</strong> {hospital_info.get('address', 'N/A')}</li>
-                <li><strong>City:</strong> {hospital_info.get('city', 'N/A')}</li>
-                <li><strong>Postcode:</strong> {hospital_info.get('postcode', 'N/A')}</li>
-                <li><strong>Phone:</strong> {hospital_info.get('phone', 'N/A')}</li>
-            </ul>
-            <div class="section-title">Appointment Details</div>
-            <ul class="info-list">
-                <li><strong>Date & Time:</strong> {formatted_date_time}</li>
-                <li><strong>Consultation Fee:</strong> £{base_fee:.2f}</li>
-            </ul>
-    """
-
-    if insurer:
-        confirmation_message_html += f"""
-            <div class="section-title">Insurance Details</div>
-            <ul class="info-list">
-                <li><strong>Provider:</strong> {insurer}</li>
-                <li><strong>Policy Number:</strong> {policy_number}</li>
-                <li><strong>Authorisation Code:</strong> {authorisation_code or "N/A"}</li>
-                <li><strong>Discount Applied:</strong> {'50% insurance discount' if insurance_discount == 0.5 else 'No discount'}</li>
-            </ul>
-        """
-
-    confirmation_message_html += f"""
-            <div class="section-title">Total Bill</div>
-            <ul class="info-list">
-                <li><strong>Total Amount Due:</strong> £{total_bill:.2f}</li>
-            </ul>
-            <div class="section-title">Contact Details</div>
-            <ul class="info-list">
-                <li><strong>Email:</strong> {email}</li>
-                <li><strong>Phone:</strong> {mobile}</li>
-            </ul>
-            <div class="footer">
-                <p>If you have any questions, please contact us at <a href="mailto:info@yourclinic.com">info@yourclinic.com</a> or call {hospital_info.get('phone', 'N/A')}.</p>
-                <p>We look forward to seeing you!</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    # --- END: HTML Template for Confirmation Email ---
-
-    if email:
-        send_email(email, "✅ Consultation Confirmed", confirmation_message_plain, confirmation_message_html)
-    if mobile:
-        send_whatsapp_message(mobile, whatsapp_message)
-
-    return jsonify({
-        "fulfillment_response": {
-            "messages": [
-                {"text": {"text": [confirmation_message_plain]}}
-            ]
-        }
-    })
-
 @app.route('/webhook', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
@@ -417,58 +225,165 @@ def webhook():
     params = req.get("sessionInfo", {}).get("parameters", {})
     logging.info(f"Webhook called. Tag: {tag}, Params: {params}, Raw Body: {req}")
 
+    # --- Doctor List ---
     if tag == "get_doctor_list":
-        # ... existing doctor list logic ...
-        return jsonify({
-            "fulfillment_response": {
-                "messages": [
-                    {"text": {"text": ["Doctor list logic not shown here."]}}
-                ]
-            }
-        })
-
-    elif tag == "get_doctor_details":
-        # ... existing doctor details logic ...
-        return jsonify({
-            "fulfillment_response": {
-                "messages": [
-                    {"text": {"text": ["Doctor details logic not shown here."]}}
-                ]
-            }
-        })
-
-    elif tag == "ask_upload_document":
-        choice = params.get("upload_choice")
-        if choice and str(choice).lower() == "no":
-            # Immediately confirm booking logic
-            return webhook_final_confirm(params)
+        city = params.get("city")
+        postcode = params.get("postcode")
+        location = params.get("location")
+        specialty = params.get("specialty")
+        available_doctors = []
+        for doctor_name, details in DOCTORS.items():
+            if specialty and specialty.lower() not in details["specialty"].lower():
+                continue
+            matching_locations = []
+            for loc in details["locations"]:
+                hospital = HOSPITALS.get(loc, {})
+                if location:
+                    if location.lower() not in hospital.get("city", "").lower() and location.lower() != hospital.get("postcode", "").lower():
+                        continue
+                elif city and city.lower() not in hospital.get("city", "").lower():
+                    continue
+                elif postcode and postcode.lower() != hospital.get("postcode", "").lower():
+                    continue
+                matching_locations.append(loc)
+            if matching_locations:
+                doctor_details = details.copy()
+                doctor_details["name"] = doctor_name
+                doctor_details["locations"] = matching_locations
+                doctor_details["available_dates"] = {loc: dates for loc, dates in details.get("available_dates", {}).items() if loc in matching_locations}
+                available_doctors.append(doctor_details)
+        if available_doctors:
+            doctor_text_lines = ["Here are some of our doctors who match your search. Which one would you like to know more about?"]
+            chips_options = []
+            for i, doctor in enumerate(available_doctors, 1):
+                text_line = (
+                    f"\n{i}. {doctor['name']}\n"
+                    f"      Specialty: {doctor['specialty']}\n"
+                    f"      Locations: {', '.join(doctor['locations'])}"
+                )
+                doctor_text_lines.append(text_line)
+                chips_options.append({
+                    "text": f"View {doctor['name']}",
+                    "value": doctor['name']
+                })
+            card_text_message = {"text": {"text": doctor_text_lines}}
+            chips_payload = {"richContent": [[{"type": "chips", "options": chips_options}]]}
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [card_text_message, {"payload": chips_payload}]
+                }
+            })
         else:
-            prompt = "Would you like to upload a medical test document before confirming your booking?"
-            chips_payload = {
-                "richContent": [
-                    [
-                        {
-                            "type": "chips",
-                            "options": [
-                                {"text": "Yes, upload document", "value": "yes"},
-                                {"text": "No, confirm booking", "value": "no"}
-                            ],
-                            "input": {
-                                "parameter": "upload_choice"
-                            }
-                        }
-                    ]
-                ]
-            }
+            response_text = f"Sorry, no {specialty} doctors found in {location or city or postcode}."
             return jsonify({
                 "fulfillment_response": {
                     "messages": [
-                        {"text": {"text": [prompt]}},
-                        {"payload": chips_payload}
+                        {"text": {"text": [response_text]}}
                     ]
                 }
             })
 
+    # --- Doctor Details ---
+    elif tag == "get_doctor_details":
+        doctor_name = params.get("doctor_name")
+        if not doctor_name:
+            doctor_name = req.get("text", "") or req.get("query_result", {}).get("query_text", "")
+            if doctor_name.lower().startswith("view "):
+                doctor_name = doctor_name[5:]
+            doctor_name = doctor_name.strip()
+        logging.info(f"Doctor name received: '{doctor_name}'")
+        match = find_doctor_key(doctor_name)
+        if not match:
+            logging.error(f"Doctor not found for input: '{doctor_name}'")
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [{"text": {"text": ["Sorry, I couldn't find details for that doctor."]}}]
+                }
+            })
+        doctor_details = DOCTORS[match]
+        locations_and_details_text = []
+        for loc_name in doctor_details.get("locations", []):
+            hospital_info = HOSPITALS.get(loc_name, {})
+            location_text = (
+                f"🏥 {loc_name}\n"
+                f"      📍 Address: {hospital_info.get('address', 'N/A')}, {hospital_info.get('postcode', 'N/A')}\n"
+                f"      📞 Phone: {hospital_info.get('phone', 'N/A')}"
+            )
+            locations_and_details_text.append(location_text)
+        services_text = ", ".join(doctor_details.get("services", []))
+        schedule_text = []
+        chips_options = []
+        for loc, slots in doctor_details.get("available_dates", {}).items():
+            schedule_text.append(f"🏥 {loc}")
+            for slot in slots:
+                date_obj = datetime.strptime(slot["date"], "%Y-%m-%d")
+                date_str = date_obj.strftime("%a, %d %b")
+                times = ", ".join(slot["times"]) if slot["times"] else "No appointments"
+                schedule_text.append(f"      📅 {date_str}: {times}")
+                for t in slot["times"]:
+                    chips_options.append({
+                        "text": f"{date_str} {t}",
+                        "value": f"Book appointment with {match} on {date_obj.date()} at {t}"
+                    })
+        detail_text = (
+            f"Here are the details for {match}:\n\n"
+            f"🩺 Specialty: {doctor_details.get('specialty')}\n"
+            f"🎓 Qualifications: {doctor_details.get('qualifications')}\n"
+            f"Practising Since: {doctor_details.get('practisingSince')}\n"
+            f"Initial Consultation Fee: £{doctor_details['fees'].get('Initial consultation')}\n\n"
+            f"🏥 Locations:\n" + "\n".join(locations_and_details_text) + "\n\n"
+            f"Services: {services_text}\n"
+            f"📅 Available Dates & Times:\n" + "\n".join(schedule_text)
+        )
+        chips_payload = {
+            "richContent": [
+                [
+                    {"type": "chips", "options": chips_options[:8]},
+                    {"type": "chips", "options": [
+                        {"text": "Go Back", "value": "Go back to doctor list"}
+                    ]}
+                ]
+            ]
+        }
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [detail_text]}},
+                    {"payload": chips_payload}
+                ]
+            }
+        })
+
+    # --- Ask if user wants to upload medical document ---
+    elif tag == "ask_upload_document":
+        # This webhook only displays the prompt and chips. Routing is handled by parameter upload_choice in CX.
+        prompt = "Would you like to upload a medical test document before confirming your booking?"
+        chips_payload = {
+            "richContent": [
+                [
+                    {
+                        "type": "chips",
+                        "options": [
+                            {"text": "Yes, upload document", "value": "yes"},
+                            {"text": "No, confirm booking", "value": "no"}
+                        ],
+                        "input": {
+                            "parameter": "upload_choice"
+                        }
+                    }
+                ]
+            ]
+        }
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [prompt]}},
+                    {"payload": chips_payload}
+                ]
+            }
+        })
+
+    # --- Handle document upload flow ---
     elif tag == "handle_upload_document":
         response_text = "Thank you. Your document has been received. Now confirming your booking..."
         return jsonify({
@@ -479,8 +394,198 @@ def webhook():
             }
         })
 
+    # --- Final Confirmation and Billing ---
     elif tag == "final_confirm_and_send":
-        return webhook_final_confirm(params)
+        name = params.get("person_name", {})
+        first_name = name.get("name") if isinstance(name, dict) else name
+        mobile = params.get("phone_number")
+        email = params.get("email")
+        appointment_datetime = params.get("appointment_datetime")
+        doctor_name = params.get("doctor_name")
+        insurer = params.get("insurance_provider")
+        policy_number = params.get("policy_number")
+        authorisation_code = params.get("authorisation_code")
+
+        match = find_doctor_key(doctor_name or "")
+        if not match:
+            return jsonify({
+                "fulfillment_response": {
+                    "messages": [{"text": {"text": ["Doctor not found."]}}]
+                }
+            })
+
+        location_name = DOCTORS[match]["locations"][0]
+        hospital_info = HOSPITALS.get(location_name, {})
+        formatted_date_time = "your selected date and time"
+        if appointment_datetime:
+            try:
+                if isinstance(appointment_datetime, dict):
+                    year = int(appointment_datetime.get("year", 0))
+                    month = int(appointment_datetime.get("month", 1))
+                    day = int(appointment_datetime.get("day", 1))
+                    hours = int(appointment_datetime.get("hours", 0))
+                    minutes = int(appointment_datetime.get("minutes", 0))
+                    seconds = int(appointment_datetime.get("seconds", 0))
+                    dt_obj = datetime(year, month, day, hours, minutes, seconds)
+                else:
+                    dt_obj = datetime.fromisoformat(appointment_datetime)
+                formatted_date_time = dt_obj.strftime("%A, %d %B %Y at %I:%M %p")
+            except Exception as e:
+                logging.warning(f"Failed to parse appointment_datetime: {appointment_datetime}, error: {e}")
+
+        base_fee = DOCTORS[match]['fees'].get('Initial consultation', 0)
+        insurance_discount = 1.0
+        if insurer and isinstance(insurer, str) and insurer.strip().lower() == "axa health":
+            insurance_discount = 0.5
+        total_bill = base_fee * insurance_discount
+
+        confirmation_message_plain = (
+            f"Booking Confirmed!\n\n"
+            f"Doctor: {match}\n"
+            f"Specialty: {DOCTORS[match]['specialty']}\n"
+            f"Location: {location_name}\n"
+            f"Address: {hospital_info.get('address', 'N/A')}\n"
+            f"Phone: {hospital_info.get('phone', 'N/A')}\n"
+            f"Date & Time: {formatted_date_time}\n"
+        )
+        if insurer:
+            confirmation_message_plain += (
+                f"Insurer: {insurer}\n"
+                f"Policy Number: {policy_number}\n"
+                f"Authorisation Code: {authorisation_code}\n"
+            )
+        confirmation_message_plain += (
+            f"Total Bill: £{total_bill:.2f}\n"
+            f"\nA confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile})."
+        )
+
+        whatsapp_message = confirmation_message_plain
+
+        # --- BEGIN: HTML Template for Confirmation Email ---
+        confirmation_message_html = f"""
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    color: #222;
+                    background-color: #f7f7f7;
+                    margin: 0;
+                    padding: 0;
+                }}
+                .container {{
+                    background: #fff;
+                    margin: 30px auto;
+                    padding: 24px;
+                    border-radius: 10px;
+                    max-width: 600px;
+                    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                }}
+                .header {{
+                    background-color: #1d7cab;
+                    color: #fff;
+                    padding: 16px;
+                    border-radius: 10px 10px 0 0;
+                    text-align: center;
+                }}
+                .section-title {{
+                    margin-top: 24px;
+                    font-size: 18px;
+                    color: #1d7cab;
+                    border-bottom: 1px solid #eee;
+                }}
+                .info-list {{
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                }}
+                .info-list li {{
+                    margin-bottom: 10px;
+                    font-size: 16px;
+                }}
+                .footer {{
+                    margin-top: 32px;
+                    font-size: 15px;
+                    color: #666;
+                    text-align: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>✅ Your Consultation is Confirmed!</h2>
+                </div>
+                <p>Dear {first_name},</p>
+                <p>
+                    Thank you for booking your consultation. Here are your appointment details:
+                </p>
+                <div class="section-title">Doctor Details</div>
+                <ul class="info-list">
+                    <li><strong>Name:</strong> {match}</li>
+                    <li><strong>Specialty:</strong> {DOCTORS[match]['specialty']}</li>
+                    <li><strong>Qualifications:</strong> {DOCTORS[match]['qualifications']}</li>
+                    <li><strong>GMC Number:</strong> {DOCTORS[match]['gmcNumber']}</li>
+                    <li><strong>Practising Since:</strong> {DOCTORS[match]['practisingSince']}</li>
+                </ul>
+                <div class="section-title">Hospital Details</div>
+                <ul class="info-list">
+                    <li><strong>Hospital:</strong> {location_name}</li>
+                    <li><strong>Address:</strong> {hospital_info.get('address', 'N/A')}</li>
+                    <li><strong>City:</strong> {hospital_info.get('city', 'N/A')}</li>
+                    <li><strong>Postcode:</strong> {hospital_info.get('postcode', 'N/A')}</li>
+                    <li><strong>Phone:</strong> {hospital_info.get('phone', 'N/A')}</li>
+                </ul>
+                <div class="section-title">Appointment Details</div>
+                <ul class="info-list">
+                    <li><strong>Date & Time:</strong> {formatted_date_time}</li>
+                    <li><strong>Consultation Fee:</strong> £{base_fee:.2f}</li>
+                </ul>
+        """
+
+        if insurer:
+            confirmation_message_html += f"""
+                <div class="section-title">Insurance Details</div>
+                <ul class="info-list">
+                    <li><strong>Provider:</strong> {insurer}</li>
+                    <li><strong>Policy Number:</strong> {policy_number}</li>
+                    <li><strong>Authorisation Code:</strong> {authorisation_code or "N/A"}</li>
+                    <li><strong>Discount Applied:</strong> {'50% insurance discount' if insurance_discount == 0.5 else 'No discount'}</li>
+                </ul>
+            """
+
+        confirmation_message_html += f"""
+                <div class="section-title">Total Bill</div>
+                <ul class="info-list">
+                    <li><strong>Total Amount Due:</strong> £{total_bill:.2f}</li>
+                </ul>
+                <div class="section-title">Contact Details</div>
+                <ul class="info-list">
+                    <li><strong>Email:</strong> {email}</li>
+                    <li><strong>Phone:</strong> {mobile}</li>
+                </ul>
+                <div class="footer">
+                    <p>If you have any questions, please contact us at <a href="mailto:info@yourclinic.com">info@yourclinic.com</a> or call {hospital_info.get('phone', 'N/A')}.</p>
+                    <p>We look forward to seeing you!</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        # --- END: HTML Template for Confirmation Email ---
+
+        if email:
+            send_email(email, "✅ Consultation Confirmed", confirmation_message_plain, confirmation_message_html)
+        if mobile:
+            send_whatsapp_message(mobile, whatsapp_message)
+
+        return jsonify({
+            "fulfillment_response": {
+                "messages": [
+                    {"text": {"text": [confirmation_message_plain]}}
+                ]
+            }
+        })
 
     else:
         return jsonify({

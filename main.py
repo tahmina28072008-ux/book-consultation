@@ -383,13 +383,24 @@ def webhook():
             }
         })
 
-    # --- Handle document upload flow ---
-    elif tag == "handle_upload_document":
-        response_text = "Thank you. Your document has been received. Now confirming your booking..."
+    elif tag == "prompt_upload_reports":
         return jsonify({
             "fulfillment_response": {
                 "messages": [
-                    {"text": {"text": [response_text]}}
+                    {
+                        "payload": {
+                            "richContent": [
+                                [
+                                    {
+                                        "type": "chips",
+                                        "options": [
+                                            { "text": "Upload Reports" }
+                                        ]
+                                    }
+                                ]
+                            ]
+                        }
+                    }
                 ]
             }
         })

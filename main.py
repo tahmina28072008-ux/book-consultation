@@ -582,19 +582,12 @@ def webhook():
         })
 
     # --- Final Confirmation and Billing ---
+        # --- Final Confirmation and Billing ---
     elif tag == "final_confirm_and_send":
         upload_choice = params.get("upload_choice")
 
-        # Fallback: check raw text if upload_choice is missing
-        user_text = body.get("text", "").lower() if body.get("text") else ""
-        if not upload_choice and "no" in user_text:
-            upload_choice = "no"
-        elif not upload_choice and "yes" in user_text:
-            upload_choice = "yes"
-
-        if upload_choice == "no":
-            return handle_confirmation(params)
-        elif upload_choice == "yes":
+        if upload_choice == "yes":
+            # User wants to upload a document first
             return jsonify({
                 "fulfillment_response": {
                     "messages": [
@@ -603,6 +596,11 @@ def webhook():
                 }
             })
 
+        # Handle "no" OR missing value (e.g. ConfirmationPage entry fulfillment)
+        if upload_choice == "no" or not upload_choice:
+            return handle_confirmation(params)
+
+        # Fallback if value is something unexpected
         return jsonify({
             "fulfillment_response": {
                 "messages": [
@@ -611,14 +609,6 @@ def webhook():
             }
         })
 
-    else:
-        return jsonify({
-            "fulfillment_response": {
-                "messages": [
-                    {"text": {"text": ["Sorry, I couldn’t process that."]}}
-                ]
-            }
-        })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

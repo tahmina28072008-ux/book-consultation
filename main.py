@@ -546,11 +546,6 @@ def webhook():
 
     # --- Ask if user wants to upload medical document ---
     elif tag == "ask_upload_document":
-        upload_choice = params.get("upload_choice")
-        if upload_choice == "no":
-            # Call the confirmation logic directly
-            return handle_confirmation(params)
-
         prompt = "Would you like to upload a medical test document before confirming your booking?"
         chips_payload = {
             "richContent": [
@@ -590,6 +585,10 @@ def webhook():
 
     # --- Final Confirmation and Billing ---
     elif tag == "final_confirm_and_send":
+        upload_choice = params.get("upload_choice")
+        if upload_choice == "no":
+            return handle_confirmation(params)
+        # If you want to handle the "yes" case, put your logic here or route accordingly
         return handle_confirmation(params)
 
     else:

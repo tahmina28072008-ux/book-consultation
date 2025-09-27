@@ -3,8 +3,6 @@ import logging
 import os
 from datetime import datetime
 from twilio.rest import Client
-import firebase_admin
-from firebase_admin import credentials, firestore
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -13,24 +11,7 @@ import difflib
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 app = Flask(__name__)
 
-# Firestore Setup
-db = None
-try:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
-except ValueError:
-    try:
-        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            cred = credentials.Certificate(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
-            firebase_admin.initialize_app(cred)
-            db = firestore.client()
-        else:
-            logging.warning("No GOOGLE_APPLICATION_CREDENTIALS found. Running without Firestore.")
-    except Exception as e:
-        logging.error(f"Error initializing Firebase: {e}")
-
-# Dummy Doctor and Hospital Data
+# --- Dummy Doctor and Hospital Data ---
 DOCTORS = {
     "Mr Md Zaker Ullah": {
         "specialty": "General Surgery, Breast Surgery",
@@ -225,11 +206,9 @@ def send_email(to_email, subject, plain_body, html_body):
     return True
 
 def find_doctor_key(user_input):
-    # Try perfect match first (case/whitespace insensitive)
     for key in DOCTORS.keys():
         if key.strip().lower() == user_input.strip().lower():
             return key
-    # Try fuzzy match (partial, ignoring Dr/Mr/Ms prefixes)
     options = [k.lower() for k in DOCTORS.keys()]
     input_clean = user_input.lower().replace('dr. ', '').replace('mr ', '').replace('ms ', '').replace('miss ', '').strip()
     match = difflib.get_close_matches(input_clean, options, n=1, cutoff=0.7)
@@ -250,6 +229,7 @@ def webhook():
     if tag == "get_doctor_list":
         city = params.get("city")
         postcode = params.get("postcode")
+        location = params.get("location")
         specialty = params.get("specialty")
         available_doctors = []
         for doctor_name, details in DOCTORS.items():
@@ -258,9 +238,12 @@ def webhook():
             matching_locations = []
             for loc in details["locations"]:
                 hospital = HOSPITALS.get(loc, {})
-                if city and city.lower() not in hospital.get("city", "").lower():
+                if location:
+                    if location.lower() not in hospital.get("city", "").lower() and location.lower() != hospital.get("postcode", "").lower():
+                        continue
+                elif city and city.lower() not in hospital.get("city", "").lower():
                     continue
-                if postcode and postcode.lower() != hospital.get("postcode", "").lower():
+                elif postcode and postcode.lower() != hospital.get("postcode", "").lower():
                     continue
                 matching_locations.append(loc)
             if matching_locations:
@@ -291,7 +274,7 @@ def webhook():
                 }
             })
         else:
-            response_text = f"Sorry, no {specialty} doctors found in {city or postcode}."
+            response_text = f"Sorry, no {specialty} doctors found in {location or city or postcode}."
             return jsonify({
                 "fulfillment_response": {
                     "messages": [
@@ -371,64 +354,15 @@ def webhook():
             }
         })
 
-    # --- Payment Method Selection ---
-    elif tag == "confirm_booking":
-        response_text = "Thank you. How would you like to pay for the consultation?"
-        chips_options = [
-            {
-                "text": "Pay for myself",
-                "value": "Pay for myself"
-            },
-            {
-                "text": "I have medical insurance",
-                "value": "I have medical insurance"
-            }
-        ]
-        chips_payload = {
-            "richContent": [
-                [
-                    {"type": "chips", "options": chips_options}
-                ]
-            ]
-        }
-        return jsonify({
-            "fulfillment_response": {
-                "messages": [
-                    {"text": {"text": [response_text]}},
-                    {"payload": chips_payload}
-                ]
-            }
-        })
-
-    # --- Insurance Details ---
-    elif tag == "ask_for_insurance_details":
-        response_text = "Please provide your Insurer, Policy number, and Authorisation code."
-        return jsonify({
-            "fulfillment_response": {
-                "messages": [
-                    {"text": {"text": [response_text]}}
-                ]
-            }
-        })
-
     # --- Final Confirmation and Billing ---
     elif tag == "final_confirm_and_send":
-        payment_method_raw = params.get("payment_method") or req.get("text", "")
-        payment_method = payment_method_raw.strip().lower()
-        if payment_method in ["pay for myself", "pay myself", "self"]:
-            payment_method = "self"
-        elif payment_method in ["i have medical insurance", "insurance"]:
-            payment_method = "insurance"
-        else:
-            logging.warning(f"Unknown payment method: {payment_method_raw}")
-
         name = params.get("person_name", {})
         first_name = name.get("name") if isinstance(name, dict) else name
         mobile = params.get("phone_number")
         email = params.get("email")
         appointment_datetime = params.get("appointment_datetime")
         doctor_name = params.get("doctor_name")
-        insurer = params.get("insurer")
+        insurer = params.get("insurance_provider")
         policy_number = params.get("policy_number")
         authorisation_code = params.get("authorisation_code")
 
@@ -460,18 +394,10 @@ def webhook():
                 logging.warning(f"Failed to parse appointment_datetime: {appointment_datetime}, error: {e}")
 
         base_fee = DOCTORS[match]['fees'].get('Initial consultation', 0)
-        if payment_method == "self":
-            total_bill = base_fee
-            payment_method_display = "Pay for myself"
-            payment_instructions = "Please proceed to payment. You can pay by card on arrival or use our online payment portal: [Pay Now](https://your-payment-link.example.com)"
-        elif payment_method == "insurance":
-            total_bill = base_fee * 0.50
-            payment_method_display = "I have medical insurance"
-            payment_instructions = ""
-        else:
-            total_bill = base_fee
-            payment_method_display = payment_method
-            payment_instructions = ""
+        insurance_discount = 1.0
+        if insurer and isinstance(insurer, str) and insurer.strip().lower() == "axa health":
+            insurance_discount = 0.5
+        total_bill = base_fee * insurance_discount
 
         confirmation_message_plain = (
             f"Booking Confirmed!\n\n"
@@ -481,9 +407,8 @@ def webhook():
             f"Address: {hospital_info.get('address', 'N/A')}\n"
             f"Phone: {hospital_info.get('phone', 'N/A')}\n"
             f"Date & Time: {formatted_date_time}\n"
-            f"Payment Method: {payment_method_display}\n"
         )
-        if payment_method == "insurance":
+        if insurer:
             confirmation_message_plain += (
                 f"Insurer: {insurer}\n"
                 f"Policy Number: {policy_number}\n"
@@ -491,36 +416,123 @@ def webhook():
             )
         confirmation_message_plain += (
             f"Total Bill: £{total_bill:.2f}\n"
-        )
-        if payment_instructions:
-            confirmation_message_plain += f"{payment_instructions}\n"
-        confirmation_message_plain += (
             f"\nA confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile})."
         )
 
-        whatsapp_message = (
-            f"Booking Confirmed!\n\n"
-            f"Doctor: {match}\n"
-            f"Specialty: {DOCTORS[match]['specialty']}\n"
-            f"Location: {location_name}\n"
-            f"Address: {hospital_info.get('address', 'N/A')}\n"
-            f"Phone: {hospital_info.get('phone', 'N/A')}\n"
-            f"Date & Time: {formatted_date_time}\n"
-            f"Payment Method: {payment_method_display}\n"
-        )
-        if payment_method == "insurance":
-            whatsapp_message += (
-                f"Insurer: {insurer}\n"
-                f"Policy Number: {policy_number}\n"
-                f"Authorisation Code: {authorisation_code}\n"
-            )
-        whatsapp_message += (
-            f"Total Bill: £{total_bill:.2f}\n"
-        )
-        if payment_instructions:
-            whatsapp_message += f"{payment_instructions}\n"
+        whatsapp_message = confirmation_message_plain
 
-        confirmation_message_html = "<!-- unchanged, as before -->"
+        # --- BEGIN: HTML Template for Confirmation Email ---
+        confirmation_message_html = f"""
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    color: #222;
+                    background-color: #f7f7f7;
+                    margin: 0;
+                    padding: 0;
+                }}
+                .container {{
+                    background: #fff;
+                    margin: 30px auto;
+                    padding: 24px;
+                    border-radius: 10px;
+                    max-width: 600px;
+                    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                }}
+                .header {{
+                    background-color: #1d7cab;
+                    color: #fff;
+                    padding: 16px;
+                    border-radius: 10px 10px 0 0;
+                    text-align: center;
+                }}
+                .section-title {{
+                    margin-top: 24px;
+                    font-size: 18px;
+                    color: #1d7cab;
+                    border-bottom: 1px solid #eee;
+                }}
+                .info-list {{
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                }}
+                .info-list li {{
+                    margin-bottom: 10px;
+                    font-size: 16px;
+                }}
+                .footer {{
+                    margin-top: 32px;
+                    font-size: 15px;
+                    color: #666;
+                    text-align: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>✅ Your Consultation is Confirmed!</h2>
+                </div>
+                <p>Dear {first_name},</p>
+                <p>
+                    Thank you for booking your consultation. Here are your appointment details:
+                </p>
+                <div class="section-title">Doctor Details</div>
+                <ul class="info-list">
+                    <li><strong>Name:</strong> {match}</li>
+                    <li><strong>Specialty:</strong> {DOCTORS[match]['specialty']}</li>
+                    <li><strong>Qualifications:</strong> {DOCTORS[match]['qualifications']}</li>
+                    <li><strong>GMC Number:</strong> {DOCTORS[match]['gmcNumber']}</li>
+                    <li><strong>Practising Since:</strong> {DOCTORS[match]['practisingSince']}</li>
+                </ul>
+                <div class="section-title">Hospital Details</div>
+                <ul class="info-list">
+                    <li><strong>Hospital:</strong> {location_name}</li>
+                    <li><strong>Address:</strong> {hospital_info.get('address', 'N/A')}</li>
+                    <li><strong>City:</strong> {hospital_info.get('city', 'N/A')}</li>
+                    <li><strong>Postcode:</strong> {hospital_info.get('postcode', 'N/A')}</li>
+                    <li><strong>Phone:</strong> {hospital_info.get('phone', 'N/A')}</li>
+                </ul>
+                <div class="section-title">Appointment Details</div>
+                <ul class="info-list">
+                    <li><strong>Date & Time:</strong> {formatted_date_time}</li>
+                    <li><strong>Consultation Fee:</strong> £{base_fee:.2f}</li>
+                </ul>
+        """
+
+        if insurer:
+            confirmation_message_html += f"""
+                <div class="section-title">Insurance Details</div>
+                <ul class="info-list">
+                    <li><strong>Provider:</strong> {insurer}</li>
+                    <li><strong>Policy Number:</strong> {policy_number}</li>
+                    <li><strong>Authorisation Code:</strong> {authorisation_code or "N/A"}</li>
+                    <li><strong>Discount Applied:</strong> {'50% insurance discount' if insurance_discount == 0.5 else 'No discount'}</li>
+                </ul>
+            """
+
+        confirmation_message_html += f"""
+                <div class="section-title">Total Bill</div>
+                <ul class="info-list">
+                    <li><strong>Total Amount Due:</strong> £{total_bill:.2f}</li>
+                </ul>
+                <div class="section-title">Contact Details</div>
+                <ul class="info-list">
+                    <li><strong>Email:</strong> {email}</li>
+                    <li><strong>Phone:</strong> {mobile}</li>
+                </ul>
+                <div class="footer">
+                    <p>If you have any questions, please contact us at <a href="mailto:info@yourclinic.com">info@yourclinic.com</a> or call {hospital_info.get('phone', 'N/A')}.</p>
+                    <p>We look forward to seeing you!</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        # --- END: HTML Template for Confirmation Email ---
 
         if email:
             send_email(email, "✅ Consultation Confirmed", confirmation_message_plain, confirmation_message_html)

@@ -354,34 +354,7 @@ def webhook():
             }
         })
 
-    # --- Ask if user wants to upload medical document ---
-    elif tag == "ask_upload_document":
-        # This webhook only displays the prompt and chips. Routing is handled by parameter upload_choice in CX.
-        prompt = "Would you like to upload a medical test document before confirming your booking?"
-        chips_payload = {
-            "richContent": [
-                [
-                    {
-                        "type": "chips",
-                        "options": [
-                            {"text": "Yes, upload document", "value": "yes"},
-                            {"text": "No, confirm booking", "value": "no"}
-                        ],
-                        "input": {
-                            "parameter": "upload_choice"
-                        }
-                    }
-                ]
-            ]
-        }
-        return jsonify({
-            "fulfillment_response": {
-                "messages": [
-                    {"text": {"text": [prompt]}},
-                    {"payload": chips_payload}
-                ]
-            }
-        })
+    
 
     elif tag == "prompt_upload_reports":
         return jsonify({
@@ -405,8 +378,7 @@ def webhook():
             }
         })
 
-    # --- Final Confirmation and Billing ---
-    elif tag == "final_confirm_and_send":
+    elif tag == "send_final_confirmation":
         name = params.get("person_name", {})
         first_name = name.get("name") if isinstance(name, dict) else name
         mobile = params.get("phone_number")
@@ -416,6 +388,8 @@ def webhook():
         insurer = params.get("insurance_provider")
         policy_number = params.get("policy_number")
         authorisation_code = params.get("authorisation_code")
+        patient_summary = params.get("patient_summary", "")
+        doctor_summary = params.get("doctor_summary", "")
 
         match = find_doctor_key(doctor_name or "")
         if not match:
@@ -467,12 +441,13 @@ def webhook():
             )
         confirmation_message_plain += (
             f"Total Bill: £{total_bill:.2f}\n"
-            f"\nA confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile})."
+            f"\nA confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile}).\n"
+            f"\n---\nPatient Summary:\n{patient_summary}\n"
+            f"\n---\nDoctor Summary:\n{doctor_summary}\n"
         )
 
         whatsapp_message = confirmation_message_plain
 
-        # --- BEGIN: HTML Template for Confirmation Email ---
         confirmation_message_html = f"""
         <html>
         <head>
@@ -575,6 +550,10 @@ def webhook():
                     <li><strong>Email:</strong> {email}</li>
                     <li><strong>Phone:</strong> {mobile}</li>
                 </ul>
+                <div class="section-title">Patient Summary</div>
+                <pre>{patient_summary}</pre>
+                <div class="section-title">Doctor Summary</div>
+                <pre>{doctor_summary}</pre>
                 <div class="footer">
                     <p>If you have any questions, please contact us at <a href="mailto:info@yourclinic.com">info@yourclinic.com</a> or call {hospital_info.get('phone', 'N/A')}.</p>
                     <p>We look forward to seeing you!</p>
@@ -583,7 +562,6 @@ def webhook():
         </body>
         </html>
         """
-        # --- END: HTML Template for Confirmation Email ---
 
         if email:
             send_email(email, "✅ Consultation Confirmed", confirmation_message_plain, confirmation_message_html)
@@ -598,6 +576,7 @@ def webhook():
             }
         })
 
+    # --- Default fallback ---
     else:
         return jsonify({
             "fulfillment_response": {

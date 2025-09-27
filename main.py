@@ -224,6 +224,11 @@ def webhook():
     tag = req.get("fulfillmentInfo", {}).get("tag")
     params = req.get("sessionInfo", {}).get("parameters", {})
     logging.info(f"Webhook called. Tag: {tag}, Params: {params}, Raw Body: {req}")
+    print("=== Incoming Webhook Call ===")
+    print(f"Tag: {tag}")
+    print("Parameters received:")
+    for k, v in params.items():
+        print(f"  {k}: {v}")
 
     # --- Doctor List ---
     if tag == "get_doctor_list":

@@ -447,8 +447,6 @@ def webhook():
         confirmation_message_plain += (
             f"Total Bill: £{total_bill:.2f}\n"
             f"\nA confirmation has been sent to your email ✉️ ({email}) and WhatsApp 📞 ({mobile}).\n"
-            f"\n---\nPatient Summary:\n{patient_summary}\n"
-            f"\n---\nDoctor Summary:\n{doctor_summary}\n"
         )
 
         whatsapp_message = confirmation_message_plain
@@ -540,7 +538,6 @@ def webhook():
                 <ul class="info-list">
                     <li><strong>Provider:</strong> {insurer}</li>
                     <li><strong>Policy Number:</strong> {policy_number}</li>
-                    <li><strong>Authorisation Code:</strong> {authorisation_code or "N/A"}</li>
                     <li><strong>Discount Applied:</strong> {'50% insurance discount' if insurance_discount == 0.5 else 'No discount'}</li>
                 </ul>
             """
@@ -555,10 +552,6 @@ def webhook():
                     <li><strong>Email:</strong> {email}</li>
                     <li><strong>Phone:</strong> {mobile}</li>
                 </ul>
-                <div class="section-title">Patient Summary</div>
-                <pre>{patient_summary}</pre>
-                <div class="section-title">Doctor Summary</div>
-                <pre>{doctor_summary}</pre>
                 <div class="footer">
                     <p>If you have any questions, please contact us at <a href="mailto:info@yourclinic.com">info@yourclinic.com</a> or call {hospital_info.get('phone', 'N/A')}.</p>
                     <p>We look forward to seeing you!</p>
